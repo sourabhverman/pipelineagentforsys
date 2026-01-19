@@ -3,7 +3,8 @@ import { Send, Bot, User, Sparkles, TrendingUp, AlertTriangle, DollarSign } from
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { type ChatMessage, type SalesforceState, formatCurrency } from '@/lib/mockData';
+import { type ChatMessage, type SalesforceState } from '@/lib/mockData';
+import { toast } from 'sonner';
 
 const suggestedQueries = [
   { icon: TrendingUp, text: "What's my Q1 forecast?" },
@@ -15,16 +16,18 @@ interface PipelineAgentProps {
   salesforce: SalesforceState;
 }
 
+const PIPELINE_AGENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pipeline-agent`;
+
 export function PipelineAgent({ salesforce }: PipelineAgentProps) {
-  const { isConnected, opportunities } = salesforce;
+  const { isConnected } = salesforce;
   
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
       role: 'assistant',
       content: isConnected 
-        ? "Hi! I'm your Pipeline Summarizer Agent, connected to your Salesforce data. I can help you analyze your pipeline, forecast revenue, and identify opportunities that need attention.\n\nTry asking me about your Q1 forecast, deals at risk, or top opportunities!"
-        : "Hi! I'm your Pipeline Summarizer Agent. Connect Salesforce to get AI-powered insights from your real pipeline data.\n\nIn demo mode, I can show you what's possible - try asking about Q1 forecast or deals at risk!",
+        ? "Hi! I'm your AI Pipeline Agent, connected to your Salesforce data. Ask me anything about your pipeline using natural language!\n\nTry: \"What's my forecast?\", \"Show at-risk deals\", or \"Who owns the biggest opportunities?\""
+        : "Hi! I'm your AI Pipeline Agent. Connect Salesforce to get AI-powered insights from your real pipeline data.\n\nOnce connected, you can ask natural language questions about your sales pipeline!",
       timestamp: new Date(),
     },
   ]);
@@ -40,147 +43,36 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
     scrollToBottom();
   }, [messages]);
 
-  const generateResponse = (query: string): string => {
-    const normalizedQuery = query.toLowerCase().trim();
-    
-    if (isConnected && opportunities.length > 0) {
-      // Generate real responses from Salesforce data
-      const totalPipeline = opportunities.reduce((sum, opp) => sum + opp.amount, 0);
-      const weightedPipeline = opportunities.reduce((sum, opp) => sum + (opp.amount * opp.probability / 100), 0);
-      const highRiskDeals = opportunities.filter(o => o.riskLevel === 'high');
-      const topDeals = [...opportunities].sort((a, b) => b.amount - a.amount).slice(0, 5);
-      
-      if (normalizedQuery.includes('forecast') || normalizedQuery.includes('q1')) {
-        return `## Q1 Forecast Summary (Salesforce Data)
+  const streamResponse = async (query: string) => {
+    const response = await fetch(PIPELINE_AGENT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ query }),
+    });
 
-**Total Pipeline Value:** ${formatCurrency(totalPipeline)}
-**Weighted Forecast:** ${formatCurrency(weightedPipeline)}
-**Total Opportunities:** ${opportunities.length}
-
-### Key Insights:
-- **${topDeals.length}** top opportunities worth ${formatCurrency(topDeals.reduce((s, o) => s + o.amount, 0))}
-- **${highRiskDeals.length}** deals flagged as high risk
-- Average win probability: ${(opportunities.reduce((s, o) => s + o.probability, 0) / opportunities.length).toFixed(0)}%
-
-### Recommended Actions:
-1. Focus on high-value opportunities in negotiation stage
-2. Address ${highRiskDeals.length} high-risk deals immediately
-3. Review stalled opportunities with extended stage durations`;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 429) {
+        throw new Error("Rate limit exceeded. Please try again in a moment.");
       }
-      
-      if (normalizedQuery.includes('risk')) {
-        const riskDeals = opportunities.filter(o => o.riskLevel === 'high' || o.riskLevel === 'medium');
-        return `## At-Risk Deals Analysis (Salesforce Data)
-
-### 🔴 High Risk (${highRiskDeals.length} deals)
-${highRiskDeals.slice(0, 3).map(d => `
-**${d.name}** - ${d.accountName}
-- Value: ${formatCurrency(d.amount)} | Stage: ${d.stage}
-- Days in stage: ${d.daysInStage}
-- Risk: ${d.riskLevel}`).join('\n')}
-
-### Total at Risk
-- **${riskDeals.length} deals** need attention
-- Combined value: ${formatCurrency(riskDeals.reduce((s, o) => s + o.amount, 0))}
-
-### Actions Required:
-1. Schedule executive calls for high-risk deals
-2. Review and update close dates
-3. Increase engagement frequency`;
+      if (response.status === 402) {
+        throw new Error("AI credits exhausted. Please add credits to continue.");
       }
-      
-      if (normalizedQuery.includes('top') || normalizedQuery.includes('value') || normalizedQuery.includes('opportunities')) {
-        return `## Top Opportunities by Value (Salesforce Data)
-
-| Rank | Opportunity | Account | Value | Probability |
-|------|------------|---------|-------|-------------|
-${topDeals.map((d, i) => `| ${i + 1} | ${d.name} | ${d.accountName} | ${formatCurrency(d.amount)} | ${d.probability}% |`).join('\n')}
-
-**Total Pipeline:** ${formatCurrency(totalPipeline)}
-**Weighted Value:** ${formatCurrency(weightedPipeline)}
-
-💡 Focus on deals with highest probability and value combination.`;
-      }
-      
-      return `I analyzed your query: "${query}"
-
-Based on your Salesforce data:
-- **${opportunities.length} active opportunities** worth ${formatCurrency(totalPipeline)}
-- **Weighted forecast:** ${formatCurrency(weightedPipeline)}
-- **${highRiskDeals.length} deals** require attention
-
-Would you like me to drill down into forecast, at-risk deals, or top opportunities?`;
+      throw new Error(errorData.error || "Failed to get AI response");
     }
-    
-    // Demo mode responses
-    const mockResponses: Record<string, string> = {
-      "what's my q1 forecast?": `## Q1 2025 Forecast Summary (Demo Data)
 
-**Total Pipeline Value:** $1,965,000
-**Weighted Forecast:** $892,500
-**Win Probability Range:** 15% - 85%
+    if (!response.body) {
+      throw new Error("No response body");
+    }
 
-### Key Insights:
-- 🟢 **2 deals** in final negotiation stage ($545K committed)
-- 🟡 **2 deals** in proposal stage ($620K at risk)
-- 🔴 **1 deal** showing stalled activity (FinanceFirst Bank)
-
-### Recommended Actions:
-1. Schedule executive call with FinanceFirst Bank - 35 days in qualification
-2. Push CRM Implementation to close by month end (85% probability)
-3. Review pricing strategy for Cloud Migration Project
-
-*Connect Salesforce for live data analysis*`,
-
-      "show deals at risk": `## At-Risk Deals Analysis (Demo Data)
-
-### 🔴 High Risk (2 deals - $960K)
-
-**1. Security Suite Upgrade - FinanceFirst Bank**
-- Value: $620,000 | Stage: Qualification
-- ⚠️ 35 days in stage (avg: 14 days)
-- Last activity: 5 days ago
-- **Action:** Immediate executive outreach required
-
-**2. Infrastructure Overhaul - Manufacturing Plus**
-- Value: $340,000 | Stage: Proposal
-- ⚠️ 28 days without response
-- Last activity: 3 days ago
-- **Action:** Schedule technical review meeting
-
-*Connect Salesforce for live risk analysis*`,
-
-      "top opportunities by value": `## Top Opportunities by Value (Demo Data)
-
-| Rank | Opportunity | Company | Value | Probability |
-|------|------------|---------|-------|-------------|
-| 1 | Security Suite Upgrade | FinanceFirst Bank | $620K | 30% |
-| 2 | Enterprise Platform Deal | TechCorp Industries | $450K | 75% |
-| 3 | Infrastructure Overhaul | Manufacturing Plus | $340K | 45% |
-| 4 | Cloud Migration Project | Global Retail Co | $280K | 50% |
-| 5 | Data Analytics Platform | HealthPlus Medical | $180K | 15% |
-
-**Total Pipeline:** $1.87M
-**Weighted Value:** $671K
-
-*Connect Salesforce for live opportunity data*`,
-    };
-
-    return mockResponses[normalizedQuery] || 
-      `I analyzed your query: "${query}"
-
-Based on demo pipeline data:
-- **6 active opportunities** worth $1.97M
-- **Average win rate:** 50%
-- **2 deals** require immediate attention
-
-Would you like me to drill down into any specific area?
-
-*Connect Salesforce for live insights*`;
+    return response;
   };
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -190,23 +82,102 @@ Would you like me to drill down into any specific area?
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const queryText = input;
     setInput('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const response = generateResponse(input);
+    let assistantContent = "";
+    
+    const updateAssistant = (content: string) => {
+      assistantContent = content;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant' && last.id.startsWith('stream-')) {
+          return prev.map((m, i) => 
+            i === prev.length - 1 ? { ...m, content: assistantContent } : m
+          );
+        }
+        return [...prev, {
+          id: `stream-${Date.now()}`,
+          role: 'assistant' as const,
+          content: assistantContent,
+          timestamp: new Date(),
+        }];
+      });
+    };
 
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+    try {
+      const response = await streamResponse(queryText);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantContent += content;
+              updateAssistant(assistantContent);
+            }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Final flush
+      if (textBuffer.trim()) {
+        for (let raw of textBuffer.split("\n")) {
+          if (!raw) continue;
+          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+          if (raw.startsWith(":") || raw.trim() === "") continue;
+          if (!raw.startsWith("data: ")) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantContent += content;
+              updateAssistant(assistantContent);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+
+    } catch (error) {
+      console.error("AI response error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to get AI response";
+      toast.error(errorMessage);
+      
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
         role: 'assistant',
-        content: response,
+        content: `Sorry, I encountered an error: ${errorMessage}\n\nPlease try again or check your connection.`,
         timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const handleSuggestion = (text: string) => {
@@ -221,9 +192,9 @@ Would you like me to drill down into any specific area?
           <Bot className="w-5 h-5 text-primary-foreground" />
         </div>
         <div>
-          <h2 className="font-semibold text-primary-foreground">Pipeline Summarizer Agent</h2>
+          <h2 className="font-semibold text-primary-foreground">AI Pipeline Agent</h2>
           <p className="text-sm text-primary-foreground/70">
-            {isConnected ? 'Connected to Salesforce' : 'Demo mode - Connect Salesforce for live data'}
+            {isConnected ? 'Powered by AI • Connected to Salesforce' : 'Connect Salesforce for live data'}
           </p>
         </div>
         <Sparkles className="w-5 h-5 text-primary-foreground/50 ml-auto animate-pulse-subtle" />
@@ -252,10 +223,8 @@ Would you like me to drill down into any specific area?
                   : "bg-muted text-foreground rounded-tl-sm"
               )}
             >
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                {message.content.split('\n').map((line, i) => (
-                  <p key={i} className="mb-1 last:mb-0">{line}</p>
-                ))}
+              <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                {message.content}
               </div>
             </div>
             {message.role === 'user' && (
@@ -266,7 +235,7 @@ Would you like me to drill down into any specific area?
           </div>
         ))}
 
-        {isTyping && (
+        {isTyping && !messages.some(m => m.id.startsWith('stream-')) && (
           <div className="flex gap-3 animate-fade-in">
             <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shrink-0">
               <Bot className="w-4 h-4 text-primary-foreground" />
@@ -312,7 +281,7 @@ Would you like me to drill down into any specific area?
                 handleSend();
               }
             }}
-            placeholder="Ask about your pipeline, forecast, or opportunities..."
+            placeholder="Ask anything about your pipeline in natural language..."
             className="min-h-[48px] max-h-32 resize-none bg-muted/50 border-0 focus-visible:ring-1"
           />
           <Button 
