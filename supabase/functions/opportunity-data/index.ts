@@ -26,8 +26,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log('Received Salesforce webhook payload:', JSON.stringify(body, null, 2));
 
-    // Validate the payload has required fields
-    if (!body.opportunity || !body.opportunity.id) {
+    // Validate the payload has required fields - check both lowercase and capitalized Id
+    const opportunity = body.opportunity;
+    if (!opportunity || (!opportunity.id && !opportunity.Id)) {
       console.error('Invalid payload: missing opportunity data');
       return new Response(
         JSON.stringify({ error: 'Invalid payload: missing opportunity data' }),
@@ -48,26 +49,28 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { opportunity, account, owner } = body;
+    const { account } = body;
+    // Handle both Salesforce field naming (capitalized) and camelCase
+    const owner = body.owner || opportunity.Owner;
 
-    // Prepare the record
+    // Prepare the record - handle both Salesforce (capitalized) and camelCase field names
     const opportunityRecord = {
-      sf_opportunity_id: opportunity.id,
-      name: opportunity.name,
-      stage_name: opportunity.stageName,
-      amount: opportunity.amount,
-      close_date: opportunity.closeDate,
-      description: opportunity.description,
-      probability: opportunity.probability,
-      opportunity_type: opportunity.type,
-      sf_account_id: opportunity.accountId || account?.id,
-      sf_owner_id: opportunity.ownerId || owner?.id,
-      account_name: account?.name,
-      account_industry: account?.industry,
-      account_billing_country: account?.billingCountry,
-      account_rating: account?.rating,
-      owner_name: owner?.name || account?.owner?.name,
-      owner_email: owner?.email || account?.owner?.email,
+      sf_opportunity_id: opportunity.Id || opportunity.id,
+      name: opportunity.Name || opportunity.name,
+      stage_name: opportunity.StageName || opportunity.stageName,
+      amount: opportunity.Amount || opportunity.amount,
+      close_date: opportunity.CloseDate || opportunity.closeDate,
+      description: opportunity.Description || opportunity.description,
+      probability: opportunity.Probability || opportunity.probability,
+      opportunity_type: opportunity.Type || opportunity.type,
+      sf_account_id: opportunity.AccountId || opportunity.accountId || account?.Id || account?.id,
+      sf_owner_id: opportunity.OwnerId || opportunity.ownerId || owner?.Id || owner?.id,
+      account_name: account?.Name || account?.name,
+      account_industry: account?.Industry || account?.industry,
+      account_billing_country: account?.BillingCountry || account?.billingCountry,
+      account_rating: account?.Rating || account?.rating,
+      owner_name: owner?.Name || owner?.name || account?.owner?.name,
+      owner_email: owner?.Email || owner?.email || account?.owner?.email,
       raw_payload: body,
       updated_at: new Date().toISOString(),
     };
