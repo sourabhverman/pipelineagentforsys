@@ -14,7 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      salesforce_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          instance_url: string
+          issued_at: string | null
+          refresh_token: string | null
+          token_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          instance_url: string
+          issued_at?: string | null
+          refresh_token?: string | null
+          token_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          instance_url?: string
+          issued_at?: string | null
+          refresh_token?: string | null
+          token_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

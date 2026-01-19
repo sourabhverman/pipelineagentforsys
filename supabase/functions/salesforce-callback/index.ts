@@ -102,10 +102,11 @@ Deno.serve(async (req) => {
       </html>`,
       { headers: { 'Content-Type': 'text/html' } }
     );
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Callback error:', error);
     return new Response(
-      `<html><body><h1>Error</h1><pre>${error.message}</pre></body></html>`,
+      `<html><body><h1>Error</h1><pre>${errorMessage}</pre></body></html>`,
       { headers: { 'Content-Type': 'text/html' }, status: 500 }
     );
   }

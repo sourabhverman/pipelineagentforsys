@@ -1,9 +1,13 @@
-import { opportunities, stageConfig, formatCurrency } from '@/lib/mockData';
+import { stageConfig, formatCurrency, type Opportunity } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
 const stages = ['Prospecting', 'Qualification', 'Proposal', 'Negotiation'] as const;
 
-export function PipelineStages() {
+interface PipelineStagesProps {
+  opportunities: Opportunity[];
+}
+
+export function PipelineStages({ opportunities }: PipelineStagesProps) {
   const stageData = stages.map(stage => {
     const stageOpps = opportunities.filter(opp => opp.stage === stage);
     const totalValue = stageOpps.reduce((sum, opp) => sum + opp.value, 0);
@@ -15,7 +19,7 @@ export function PipelineStages() {
     };
   });
 
-  const maxValue = Math.max(...stageData.map(s => s.value));
+  const maxValue = Math.max(...stageData.map(s => s.value), 1);
 
   return (
     <div className="bg-card rounded-xl border shadow-card p-6 animate-slide-up">

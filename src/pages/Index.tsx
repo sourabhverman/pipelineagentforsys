@@ -4,22 +4,24 @@ import { DashboardView } from '@/components/views/DashboardView';
 import { PipelineAgentView } from '@/components/views/PipelineAgentView';
 import { ForecastView } from '@/components/views/ForecastView';
 import { OpportunitiesView } from '@/components/views/OpportunitiesView';
+import { useSalesforce } from '@/hooks/useSalesforce';
 
 const Index = () => {
   const [activeView, setActiveView] = useState('dashboard');
+  const salesforce = useSalesforce();
 
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <DashboardView />;
+        return <DashboardView salesforce={salesforce} />;
       case 'pipeline-agent':
-        return <PipelineAgentView />;
+        return <PipelineAgentView salesforce={salesforce} />;
       case 'forecast':
-        return <ForecastView />;
+        return <ForecastView salesforce={salesforce} />;
       case 'opportunities':
-        return <OpportunitiesView />;
+        return <OpportunitiesView salesforce={salesforce} />;
       default:
-        return <DashboardView />;
+        return <DashboardView salesforce={salesforce} />;
     }
   };
 

@@ -98,8 +98,9 @@ Deno.serve(async (req) => {
     let result;
     try {
       result = await fetchFromSalesforce(instanceUrl, accessToken, opportunityQuery);
-    } catch (error) {
-      if (error.message === 'TOKEN_EXPIRED') {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage === 'TOKEN_EXPIRED') {
         console.log('Token expired, refreshing...');
         accessToken = await refreshAccessToken(supabase, connection);
         result = await fetchFromSalesforce(instanceUrl, accessToken, opportunityQuery);
@@ -133,10 +134,11 @@ Deno.serve(async (req) => {
       JSON.stringify({ opportunities, totalSize: result.totalSize }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error fetching opportunities:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
