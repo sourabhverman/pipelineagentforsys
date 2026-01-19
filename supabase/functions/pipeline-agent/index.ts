@@ -26,15 +26,55 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Fetch opportunities from database for context
+    // Get user from auth header
+    const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { data: opportunities, error: dbError } = await supabase
+    let userEmail: string | null = null;
+    let isAdmin = false;
+    let userId: string | null = null;
+
+    // Verify user auth
+    if (authHeader?.startsWith("Bearer ")) {
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      
+      const token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+      
+      if (!claimsError && claimsData?.claims) {
+        userId = claimsData.claims.sub as string;
+        
+        // Get user email and check admin role
+        const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+        
+        const [profileResult, roleResult] = await Promise.all([
+          serviceClient.from("profiles").select("email").eq("user_id", userId).single(),
+          serviceClient.from("user_roles").select("role").eq("user_id", userId)
+        ]);
+        
+        userEmail = profileResult.data?.email || null;
+        isAdmin = roleResult.data?.some(r => r.role === "admin") || false;
+      }
+    }
+
+    // Fetch opportunities based on user role
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+    
+    let opportunitiesQuery = serviceClient
       .from("salesforce_opportunities")
       .select("*")
       .order("amount", { ascending: false });
+
+    // Filter by owner_email if not admin
+    if (!isAdmin && userEmail) {
+      opportunitiesQuery = opportunitiesQuery.eq("owner_email", userEmail);
+    }
+
+    const { data: opportunities, error: dbError } = await opportunitiesQuery;
 
     if (dbError) {
       console.error("Database error:", dbError);
@@ -83,7 +123,13 @@ ${opportunities.filter(o => (o.probability || 0) < 50 || !o.close_date).slice(0,
       pipelineContext = "No opportunities data available in the database. Please sync Salesforce data first.";
     }
 
+    const userContext = isAdmin 
+      ? "You are viewing ALL opportunities as an admin." 
+      : `You are viewing opportunities owned by ${userEmail || "the current user"}.`;
+
     const systemPrompt = `You are a Pipeline Summarizer Agent - an AI assistant that analyzes sales pipeline data and provides actionable insights.
+
+${userContext}
 
 You have access to real Salesforce opportunity data. Use this data to answer questions about:
 - Revenue forecasts and pipeline health
