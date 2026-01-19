@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encode as base64encode } from "https://deno.land/std@0.220.0/encoding/base64url.ts";
+import { encodeBase64Url } from "https://deno.land/std@0.220.0/encoding/base64url.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,7 +10,7 @@ const corsHeaders = {
 function generateCodeVerifier(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
-  return base64encode(array);
+  return encodeBase64Url(array);
 }
 
 // Generate code challenge from verifier using SHA-256
@@ -18,7 +18,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
   const digest = await crypto.subtle.digest('SHA-256', data);
-  return base64encode(new Uint8Array(digest));
+  return encodeBase64Url(new Uint8Array(digest));
 }
 
 Deno.serve(async (req) => {
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     authUrl.searchParams.set('code_challenge', codeChallenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
     
-    console.log('Generated Salesforce auth URL with PKCE');
+    console.log('Generated Salesforce auth URL with PKCE, state:', state);
     
     return new Response(
       JSON.stringify({ authUrl: authUrl.toString() }),

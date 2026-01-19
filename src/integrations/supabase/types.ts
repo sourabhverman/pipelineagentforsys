@@ -47,6 +47,24 @@ export type Database = {
         }
         Relationships: []
       }
+      salesforce_pkce: {
+        Row: {
+          code_verifier: string
+          created_at: string
+          state: string
+        }
+        Insert: {
+          code_verifier: string
+          created_at?: string
+          state: string
+        }
+        Update: {
+          code_verifier?: string
+          created_at?: string
+          state?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
