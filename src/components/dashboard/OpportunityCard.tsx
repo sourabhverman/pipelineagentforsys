@@ -12,8 +12,28 @@ const riskStyles = {
   high: 'text-risk',
 };
 
+// Default style for unknown stages
+const defaultStageStyle = { color: 'bg-muted', textColor: 'text-muted-foreground', order: 0 };
+
+// Map Salesforce stage names to our configured stages
+const mapStageToConfig = (stage: string): { color: string; textColor: string; order: number } => {
+  // Direct match first
+  if (stageConfig[stage]) return stageConfig[stage];
+  
+  // Normalize: check if stage contains any of our known stage names
+  const normalizedStage = stage.toLowerCase();
+  if (normalizedStage.includes('prospect')) return stageConfig['Prospecting'];
+  if (normalizedStage.includes('qualif')) return stageConfig['Qualification'];
+  if (normalizedStage.includes('proposal')) return stageConfig['Proposal'];
+  if (normalizedStage.includes('negotiat')) return stageConfig['Negotiation'];
+  if (normalizedStage.includes('closed won') || normalizedStage.includes('closed-won')) return stageConfig['Closed Won'];
+  if (normalizedStage.includes('closed lost') || normalizedStage.includes('closed-lost')) return stageConfig['Closed Lost'];
+  
+  return defaultStageStyle;
+};
+
 export function OpportunityCard({ opportunity }: OpportunityCardProps) {
-  const stageStyle = stageConfig[opportunity.stage];
+  const stageStyle = mapStageToConfig(opportunity.stage);
 
   return (
     <div className="bg-card rounded-xl border shadow-card p-5 hover:shadow-card-hover transition-all duration-300 animate-fade-in group">
