@@ -15,8 +15,9 @@ interface DashboardViewProps {
 export function DashboardView({ salesforce }: DashboardViewProps) {
   const { isConnected, isLoading, opportunities: sfOpportunities, error, connectSalesforce, refreshData } = salesforce;
   
-  // Use Salesforce data if connected, otherwise use mock data
-  const displayOpportunities = isConnected && sfOpportunities.length > 0
+  // Use Salesforce data if connected (even if empty for proper zero-state)
+  // Only fall back to mock data if not connected
+  const displayOpportunities = isConnected
     ? sfOpportunities.map(convertToDisplayOpportunity)
     : mockOpportunities;
 
@@ -97,11 +98,18 @@ export function DashboardView({ salesforce }: DashboardViewProps) {
             
             <div>
               <h3 className="text-lg font-semibold mb-4">Recent Opportunities</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {displayOpportunities.slice(0, 4).map((opp) => (
-                  <OpportunityCard key={opp.id} opportunity={opp} />
-                ))}
-              </div>
+              {displayOpportunities.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {displayOpportunities.slice(0, 4).map((opp) => (
+                    <OpportunityCard key={opp.id} opportunity={opp} />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-card border rounded-lg p-8 text-center text-muted-foreground">
+                  <p>No opportunities available for your account.</p>
+                  <p className="text-sm mt-1">Opportunities will appear here when assigned to your email.</p>
+                </div>
+              )}
             </div>
           </div>
 
