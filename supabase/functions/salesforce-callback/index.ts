@@ -13,6 +13,7 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
     const errorDescription = url.searchParams.get('error_description');
 
@@ -31,11 +32,43 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (!state) {
+      return new Response(
+        '<html><body><h1>Missing state parameter</h1></body></html>',
+        { headers: { 'Content-Type': 'text/html' }, status: 400 }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    // Retrieve the code verifier using the state
+    const { data: pkceData, error: pkceError } = await supabase
+      .from('salesforce_pkce')
+      .select('code_verifier')
+      .eq('state', state)
+      .single();
+
+    if (pkceError || !pkceData) {
+      console.error('PKCE retrieval error:', pkceError);
+      return new Response(
+        '<html><body><h1>Invalid or expired OAuth state</h1><p>Please try connecting again.</p></body></html>',
+        { headers: { 'Content-Type': 'text/html' }, status: 400 }
+      );
+    }
+
+    const codeVerifier = pkceData.code_verifier;
+
+    // Clean up the PKCE record
+    await supabase.from('salesforce_pkce').delete().eq('state', state);
+
     const clientId = Deno.env.get('SALESFORCE_CLIENT_ID');
     const clientSecret = Deno.env.get('SALESFORCE_CLIENT_SECRET');
     const redirectUri = `${Deno.env.get('SUPABASE_URL')}/functions/v1/salesforce-callback`;
 
-    // Exchange code for tokens
+    // Exchange code for tokens with PKCE verifier
     const tokenResponse = await fetch('https://login.salesforce.com/services/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -45,6 +78,7 @@ Deno.serve(async (req) => {
         client_id: clientId!,
         client_secret: clientSecret!,
         redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
       }),
     });
 
@@ -60,11 +94,6 @@ Deno.serve(async (req) => {
     }
 
     // Store tokens in Supabase
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-
     const { error: upsertError } = await supabase
       .from('salesforce_connections')
       .upsert({
@@ -73,7 +102,7 @@ Deno.serve(async (req) => {
         refresh_token: tokenData.refresh_token,
         instance_url: tokenData.instance_url,
         token_type: tokenData.token_type,
-        issued_at: new Date(parseInt(tokenData.issued_at)).toISOString(),
+        issued_at: tokenData.issued_at ? new Date(parseInt(tokenData.issued_at)).toISOString() : new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });
 
@@ -85,14 +114,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    console.log('Salesforce connected successfully!');
+
     // Redirect back to the app
-    const appUrl = Deno.env.get('APP_URL') || 'https://id-preview--5ddf4e31-0159-4718-8163-9c668d7757c6.lovable.app';
+    const appUrl = 'https://id-preview--5ddf4e31-0159-4718-8163-9c668d7757c6.lovable.app';
     
     return new Response(
       `<html>
+        <head>
+          <style>
+            body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #0f172a, #1e293b); color: white; }
+            .container { text-align: center; padding: 2rem; }
+            h1 { color: #22c55e; margin-bottom: 1rem; }
+            p { color: #94a3b8; }
+          </style>
+        </head>
         <body>
-          <h1>Salesforce Connected Successfully!</h1>
-          <p>Redirecting back to your app...</p>
+          <div class="container">
+            <h1>✓ Salesforce Connected!</h1>
+            <p>Redirecting back to your app...</p>
+          </div>
           <script>
             setTimeout(() => {
               window.location.href = '${appUrl}?salesforce_connected=true';
