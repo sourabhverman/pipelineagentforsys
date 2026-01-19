@@ -47,6 +47,75 @@ export type Database = {
         }
         Relationships: []
       }
+      salesforce_opportunities: {
+        Row: {
+          account_billing_country: string | null
+          account_industry: string | null
+          account_name: string | null
+          account_rating: string | null
+          amount: number | null
+          close_date: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          opportunity_type: string | null
+          owner_email: string | null
+          owner_name: string | null
+          probability: number | null
+          raw_payload: Json | null
+          sf_account_id: string | null
+          sf_opportunity_id: string
+          sf_owner_id: string | null
+          stage_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_billing_country?: string | null
+          account_industry?: string | null
+          account_name?: string | null
+          account_rating?: string | null
+          amount?: number | null
+          close_date?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          opportunity_type?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          probability?: number | null
+          raw_payload?: Json | null
+          sf_account_id?: string | null
+          sf_opportunity_id: string
+          sf_owner_id?: string | null
+          stage_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_billing_country?: string | null
+          account_industry?: string | null
+          account_name?: string | null
+          account_rating?: string | null
+          amount?: number | null
+          close_date?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          opportunity_type?: string | null
+          owner_email?: string | null
+          owner_name?: string | null
+          probability?: number | null
+          raw_payload?: Json | null
+          sf_account_id?: string | null
+          sf_opportunity_id?: string
+          sf_owner_id?: string | null
+          stage_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       salesforce_pkce: {
         Row: {
           code_verifier: string
