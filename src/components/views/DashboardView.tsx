@@ -1,10 +1,11 @@
-import { DollarSign, Target, AlertTriangle, TrendingUp } from 'lucide-react';
+import { DollarSign, Target, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PipelineStages } from '@/components/dashboard/PipelineStages';
 import { RiskDeals } from '@/components/dashboard/RiskDeals';
 import { OpportunityCard } from '@/components/dashboard/OpportunityCard';
 import { SalesforceConnect } from '@/components/salesforce/SalesforceConnect';
+import { Button } from '@/components/ui/button';
 import { mockOpportunities, formatCurrency, convertToDisplayOpportunity, type SalesforceState } from '@/lib/mockData';
 
 interface DashboardViewProps {
@@ -30,7 +31,19 @@ export function DashboardView({ salesforce }: DashboardViewProps) {
     <div className="flex-1 flex flex-col">
       <Header 
         title="Pipeline Dashboard" 
-        subtitle={isConnected ? "Connected to Salesforce" : "Demo Mode - Connect Salesforce for live data"} 
+        subtitle={isConnected ? "Connected to Salesforce" : "Demo Mode - Connect Salesforce for live data"}
+        action={
+          <Button 
+            onClick={refreshData} 
+            disabled={isLoading}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'Syncing...' : 'Sync Data'}
+          </Button>
+        }
       />
       
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
