@@ -46,6 +46,20 @@ interface SalesforceState {
   error: string | null;
 }
 
+// Helper to calculate risk level based on probability and days
+function calculateRiskLevel(probability: number, daysUntilClose: number): 'low' | 'medium' | 'high' {
+  if (probability >= 70 && daysUntilClose > 7) return 'low';
+  if (probability < 30 || daysUntilClose < 3) return 'high';
+  return 'medium';
+}
+
+// Helper to calculate days in stage (estimate based on updated_at)
+function calculateDaysInStage(updatedAt: string): number {
+  const updated = new Date(updatedAt);
+  const now = new Date();
+  return Math.floor((now.getTime() - updated.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 export function useSalesforce() {
   const [state, setState] = useState<SalesforceState>({
     isConnected: false,
@@ -56,127 +70,190 @@ export function useSalesforce() {
     error: null,
   });
 
+  // Check if we have any opportunities in the database (indicates Salesforce is pushing data)
   const checkConnection = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('salesforce-status');
+      const { data, error } = await supabase
+        .from('salesforce_opportunities')
+        .select('id')
+        .limit(1);
+      
       if (error) throw error;
-      return data?.connected || false;
+      return (data && data.length > 0);
     } catch (err) {
       console.error('Error checking Salesforce connection:', err);
       return false;
     }
   }, []);
 
-  const connectSalesforce = useCallback(async () => {
+  // Fetch opportunities from the local database (pushed by Salesforce webhook)
+  const fetchOpportunities = useCallback(async (): Promise<SalesforceOpportunity[]> => {
     try {
-      setState(s => ({ ...s, isLoading: true, error: null }));
-      const { data, error } = await supabase.functions.invoke('salesforce-auth');
+      const { data, error } = await supabase
+        .from('salesforce_opportunities')
+        .select('*')
+        .order('close_date', { ascending: true });
+      
       if (error) throw error;
       
-      if (data?.authUrl) {
-        // Open Salesforce OAuth in a new window
-        window.open(data.authUrl, '_blank', 'width=600,height=700');
-      }
-    } catch (err: any) {
-      console.error('Error connecting to Salesforce:', err);
-      setState(s => ({ ...s, error: err.message, isLoading: false }));
-    }
-  }, []);
-
-  const fetchOpportunities = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('salesforce-opportunities');
-      if (error) throw error;
-      
-      if (data?.needsAuth) {
-        setState(s => ({ ...s, isConnected: false, isLoading: false }));
+      if (!data || data.length === 0) {
         return [];
       }
-      
-      return data?.opportunities || [];
-    } catch (err: any) {
+
+      // Transform database records to our interface format
+      return data.map(opp => {
+        const daysUntilClose = Math.ceil(
+          (new Date(opp.close_date || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const daysInStage = calculateDaysInStage(opp.updated_at);
+        
+        return {
+          id: opp.sf_opportunity_id,
+          name: opp.name,
+          accountName: opp.account_name || 'Unknown Account',
+          amount: Number(opp.amount) || 0,
+          stage: opp.stage_name || 'Unknown',
+          probability: opp.probability || 0,
+          closeDate: opp.close_date || '',
+          owner: opp.owner_name || 'Unknown',
+          nextStep: undefined,
+          leadSource: undefined,
+          type: opp.opportunity_type,
+          daysInStage,
+          riskLevel: calculateRiskLevel(opp.probability || 0, daysUntilClose),
+        };
+      });
+    } catch (err) {
       console.error('Error fetching opportunities:', err);
       throw err;
     }
   }, []);
 
-  const fetchForecast = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('salesforce-forecast');
-      if (error) throw error;
+  // Generate forecast data from opportunities
+  const generateForecast = useCallback((opportunities: SalesforceOpportunity[]) => {
+    if (opportunities.length === 0) {
+      return {
+        teamForecasts: [],
+        summary: null,
+      };
+    }
+
+    // Group by owner to create team forecasts
+    const byOwner = opportunities.reduce((acc, opp) => {
+      const owner = opp.owner || 'Unknown';
+      if (!acc[owner]) {
+        acc[owner] = [];
+      }
+      acc[owner].push(opp);
+      return acc;
+    }, {} as Record<string, SalesforceOpportunity[]>);
+
+    const teamForecasts: TeamForecast[] = Object.entries(byOwner).map(([owner, opps], index) => {
+      const pipeline = opps.reduce((sum, o) => sum + o.amount, 0);
+      const weighted = opps.reduce((sum, o) => sum + (o.amount * o.probability / 100), 0);
+      const closed = opps.filter(o => o.stage === 'Closed Won').reduce((sum, o) => sum + o.amount, 0);
       
       return {
-        teamForecasts: data?.teamForecasts || [],
-        summary: data?.summary || null,
+        id: `team-${index}`,
+        teamName: `${owner}'s Team`,
+        teamLead: owner,
+        pipeline,
+        weighted,
+        closed,
+        target: pipeline * 1.2, // Estimate target as 120% of pipeline
+        dealCount: opps.length,
       };
-    } catch (err: any) {
-      console.error('Error fetching forecast:', err);
-      throw err;
-    }
+    });
+
+    const totalPipeline = teamForecasts.reduce((sum, t) => sum + t.pipeline, 0);
+    const totalWeighted = teamForecasts.reduce((sum, t) => sum + t.weighted, 0);
+    const totalTarget = teamForecasts.reduce((sum, t) => sum + t.target, 0);
+    
+    const now = new Date();
+    const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0);
+
+    const summary: ForecastSummary = {
+      totalPipeline,
+      totalWeighted,
+      totalTarget,
+      quarterStart: quarterStart.toISOString().split('T')[0],
+      quarterEnd: quarterEnd.toISOString().split('T')[0],
+      variance: ((totalWeighted / totalTarget - 1) * 100).toFixed(1) + '%',
+    };
+
+    return { teamForecasts, summary };
   }, []);
 
   const refreshData = useCallback(async () => {
     setState(s => ({ ...s, isLoading: true, error: null }));
     
     try {
-      const connected = await checkConnection();
+      const opportunities = await fetchOpportunities();
+      const connected = opportunities.length > 0;
       
       if (!connected) {
-        setState(s => ({ 
-          ...s, 
+        setState({ 
           isConnected: false, 
           isLoading: false,
           opportunities: [],
           teamForecasts: [],
           forecastSummary: null,
-        }));
+          error: null,
+        });
         return;
       }
 
-      const [opportunities, forecastData] = await Promise.all([
-        fetchOpportunities(),
-        fetchForecast(),
-      ]);
+      const { teamForecasts, summary } = generateForecast(opportunities);
 
       setState({
         isConnected: true,
         isLoading: false,
         opportunities,
-        teamForecasts: forecastData.teamForecasts,
-        forecastSummary: forecastData.summary,
+        teamForecasts,
+        forecastSummary: summary,
         error: null,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setState(s => ({ 
         ...s, 
         isLoading: false, 
-        error: err.message 
+        error: errorMessage,
       }));
     }
-  }, [checkConnection, fetchOpportunities, fetchForecast]);
+  }, [fetchOpportunities, generateForecast]);
 
-  // Check connection on mount and listen for callback
+  // Set up realtime subscription for live updates
   useEffect(() => {
     refreshData();
 
-    // Listen for Salesforce callback
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.salesforceConnected) {
-        refreshData();
-      }
+    // Subscribe to changes in salesforce_opportunities table
+    const channel = supabase
+      .channel('salesforce-opportunities-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'salesforce_opportunities',
+        },
+        () => {
+          console.log('Salesforce opportunity updated, refreshing data...');
+          refreshData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    window.addEventListener('message', handleMessage);
-
-    // Check URL for callback
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('salesforce_connected') === 'true') {
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
-      refreshData();
-    }
-
-    return () => window.removeEventListener('message', handleMessage);
   }, [refreshData]);
+
+  // Placeholder for connect - now webhook-based, so just shows setup info
+  const connectSalesforce = useCallback(async () => {
+    setState(s => ({ ...s, error: 'This integration uses Salesforce push (webhook). Configure your Salesforce org to send data to the webhook endpoint.' }));
+  }, []);
 
   return {
     ...state,
