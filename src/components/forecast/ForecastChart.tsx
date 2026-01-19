@@ -1,8 +1,12 @@
-import { teamForecasts, formatCurrency } from '@/lib/mockData';
+import { formatCurrency, type LegacyTeamForecast } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
-export function ForecastChart() {
-  const maxValue = Math.max(...teamForecasts.map(t => Math.max(t.pipeline, t.target)));
+interface ForecastChartProps {
+  forecasts: LegacyTeamForecast[];
+}
+
+export function ForecastChart({ forecasts }: ForecastChartProps) {
+  const maxValue = Math.max(...forecasts.map(t => Math.max(t.pipeline, t.target)), 1);
 
   return (
     <div className="bg-card rounded-xl border shadow-card p-6 animate-slide-up">
@@ -24,7 +28,7 @@ export function ForecastChart() {
       </div>
 
       <div className="space-y-6">
-        {teamForecasts.map((team) => (
+        {forecasts.map((team) => (
           <div key={team.teamName} className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-medium">{team.teamName}</span>

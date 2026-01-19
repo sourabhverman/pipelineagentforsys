@@ -1,3 +1,52 @@
+// Types for Salesforce data
+export interface SalesforceOpportunity {
+  id: string;
+  name: string;
+  accountName: string;
+  amount: number;
+  stage: string;
+  probability: number;
+  closeDate: string;
+  owner: string;
+  nextStep?: string;
+  leadSource?: string;
+  type?: string;
+  daysInStage: number;
+  riskLevel: 'low' | 'medium' | 'high';
+}
+
+export interface TeamForecast {
+  id: string;
+  teamName: string;
+  teamLead: string;
+  pipeline: number;
+  weighted: number;
+  closed: number;
+  target: number;
+  dealCount: number;
+}
+
+export interface ForecastSummary {
+  totalPipeline: number;
+  totalWeighted: number;
+  totalTarget: number;
+  quarterStart: string;
+  quarterEnd: string;
+  variance: string;
+}
+
+export interface SalesforceState {
+  isConnected: boolean;
+  isLoading: boolean;
+  opportunities: SalesforceOpportunity[];
+  teamForecasts: TeamForecast[];
+  forecastSummary: ForecastSummary | null;
+  error: string | null;
+  connectSalesforce: () => void;
+  refreshData: () => void;
+}
+
+// Legacy types for mock data compatibility
 export interface Opportunity {
   id: string;
   name: string;
@@ -12,7 +61,7 @@ export interface Opportunity {
   lastActivity: string;
 }
 
-export interface TeamForecast {
+export interface LegacyTeamForecast {
   teamName: string;
   teamLead: string;
   committed: number;
@@ -30,7 +79,8 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-export const opportunities: Opportunity[] = [
+// Mock data for when Salesforce is not connected
+export const mockOpportunities: Opportunity[] = [
   {
     id: '1',
     name: 'Enterprise Platform Deal',
@@ -111,7 +161,7 @@ export const opportunities: Opportunity[] = [
   },
 ];
 
-export const teamForecasts: TeamForecast[] = [
+export const mockTeamForecasts: LegacyTeamForecast[] = [
   {
     teamName: 'Enterprise West',
     teamLead: 'Sarah Chen',
@@ -154,7 +204,11 @@ export const teamForecasts: TeamForecast[] = [
   },
 ];
 
-export const stageConfig = {
+// Alias for backward compatibility
+export const opportunities = mockOpportunities;
+export const teamForecasts = mockTeamForecasts;
+
+export const stageConfig: Record<string, { color: string; textColor: string; order: number }> = {
   'Prospecting': { color: 'bg-muted', textColor: 'text-muted-foreground', order: 1 },
   'Qualification': { color: 'bg-accent/20', textColor: 'text-accent', order: 2 },
   'Proposal': { color: 'bg-warning/20', textColor: 'text-warning', order: 3 },
@@ -175,3 +229,18 @@ export const formatCurrency = (value: number): string => {
 export const formatPercentage = (value: number): string => {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 };
+
+// Helper to convert Salesforce opportunity to display format
+export const convertToDisplayOpportunity = (sfOpp: SalesforceOpportunity): Opportunity => ({
+  id: sfOpp.id,
+  name: sfOpp.name,
+  company: sfOpp.accountName,
+  value: sfOpp.amount,
+  stage: sfOpp.stage as Opportunity['stage'],
+  probability: sfOpp.probability,
+  closeDate: sfOpp.closeDate,
+  owner: sfOpp.owner,
+  daysInStage: sfOpp.daysInStage,
+  riskLevel: sfOpp.riskLevel,
+  lastActivity: `${sfOpp.daysInStage} days ago`,
+});

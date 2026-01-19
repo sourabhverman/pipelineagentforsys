@@ -3,7 +3,7 @@ import { Send, Bot, User, Sparkles, TrendingUp, AlertTriangle, DollarSign } from
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { ChatMessage } from '@/lib/mockData';
+import { type ChatMessage, type SalesforceState, formatCurrency } from '@/lib/mockData';
 
 const suggestedQueries = [
   { icon: TrendingUp, text: "What's my Q1 forecast?" },
@@ -11,8 +11,110 @@ const suggestedQueries = [
   { icon: DollarSign, text: "Top opportunities by value" },
 ];
 
-const mockResponses: Record<string, string> = {
-  "what's my q1 forecast?": `## Q1 2025 Forecast Summary
+interface PipelineAgentProps {
+  salesforce: SalesforceState;
+}
+
+export function PipelineAgent({ salesforce }: PipelineAgentProps) {
+  const { isConnected, opportunities } = salesforce;
+  
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: '1',
+      role: 'assistant',
+      content: isConnected 
+        ? "Hi! I'm your Pipeline Summarizer Agent, connected to your Salesforce data. I can help you analyze your pipeline, forecast revenue, and identify opportunities that need attention.\n\nTry asking me about your Q1 forecast, deals at risk, or top opportunities!"
+        : "Hi! I'm your Pipeline Summarizer Agent. Connect Salesforce to get AI-powered insights from your real pipeline data.\n\nIn demo mode, I can show you what's possible - try asking about Q1 forecast or deals at risk!",
+      timestamp: new Date(),
+    },
+  ]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const generateResponse = (query: string): string => {
+    const normalizedQuery = query.toLowerCase().trim();
+    
+    if (isConnected && opportunities.length > 0) {
+      // Generate real responses from Salesforce data
+      const totalPipeline = opportunities.reduce((sum, opp) => sum + opp.amount, 0);
+      const weightedPipeline = opportunities.reduce((sum, opp) => sum + (opp.amount * opp.probability / 100), 0);
+      const highRiskDeals = opportunities.filter(o => o.riskLevel === 'high');
+      const topDeals = [...opportunities].sort((a, b) => b.amount - a.amount).slice(0, 5);
+      
+      if (normalizedQuery.includes('forecast') || normalizedQuery.includes('q1')) {
+        return `## Q1 Forecast Summary (Salesforce Data)
+
+**Total Pipeline Value:** ${formatCurrency(totalPipeline)}
+**Weighted Forecast:** ${formatCurrency(weightedPipeline)}
+**Total Opportunities:** ${opportunities.length}
+
+### Key Insights:
+- **${topDeals.length}** top opportunities worth ${formatCurrency(topDeals.reduce((s, o) => s + o.amount, 0))}
+- **${highRiskDeals.length}** deals flagged as high risk
+- Average win probability: ${(opportunities.reduce((s, o) => s + o.probability, 0) / opportunities.length).toFixed(0)}%
+
+### Recommended Actions:
+1. Focus on high-value opportunities in negotiation stage
+2. Address ${highRiskDeals.length} high-risk deals immediately
+3. Review stalled opportunities with extended stage durations`;
+      }
+      
+      if (normalizedQuery.includes('risk')) {
+        const riskDeals = opportunities.filter(o => o.riskLevel === 'high' || o.riskLevel === 'medium');
+        return `## At-Risk Deals Analysis (Salesforce Data)
+
+### 🔴 High Risk (${highRiskDeals.length} deals)
+${highRiskDeals.slice(0, 3).map(d => `
+**${d.name}** - ${d.accountName}
+- Value: ${formatCurrency(d.amount)} | Stage: ${d.stage}
+- Days in stage: ${d.daysInStage}
+- Risk: ${d.riskLevel}`).join('\n')}
+
+### Total at Risk
+- **${riskDeals.length} deals** need attention
+- Combined value: ${formatCurrency(riskDeals.reduce((s, o) => s + o.amount, 0))}
+
+### Actions Required:
+1. Schedule executive calls for high-risk deals
+2. Review and update close dates
+3. Increase engagement frequency`;
+      }
+      
+      if (normalizedQuery.includes('top') || normalizedQuery.includes('value') || normalizedQuery.includes('opportunities')) {
+        return `## Top Opportunities by Value (Salesforce Data)
+
+| Rank | Opportunity | Account | Value | Probability |
+|------|------------|---------|-------|-------------|
+${topDeals.map((d, i) => `| ${i + 1} | ${d.name} | ${d.accountName} | ${formatCurrency(d.amount)} | ${d.probability}% |`).join('\n')}
+
+**Total Pipeline:** ${formatCurrency(totalPipeline)}
+**Weighted Value:** ${formatCurrency(weightedPipeline)}
+
+💡 Focus on deals with highest probability and value combination.`;
+      }
+      
+      return `I analyzed your query: "${query}"
+
+Based on your Salesforce data:
+- **${opportunities.length} active opportunities** worth ${formatCurrency(totalPipeline)}
+- **Weighted forecast:** ${formatCurrency(weightedPipeline)}
+- **${highRiskDeals.length} deals** require attention
+
+Would you like me to drill down into forecast, at-risk deals, or top opportunities?`;
+    }
+    
+    // Demo mode responses
+    const mockResponses: Record<string, string> = {
+      "what's my q1 forecast?": `## Q1 2025 Forecast Summary (Demo Data)
 
 **Total Pipeline Value:** $1,965,000
 **Weighted Forecast:** $892,500
@@ -26,9 +128,11 @@ const mockResponses: Record<string, string> = {
 ### Recommended Actions:
 1. Schedule executive call with FinanceFirst Bank - 35 days in qualification
 2. Push CRM Implementation to close by month end (85% probability)
-3. Review pricing strategy for Cloud Migration Project`,
+3. Review pricing strategy for Cloud Migration Project
 
-  "show deals at risk": `## At-Risk Deals Analysis
+*Connect Salesforce for live data analysis*`,
+
+      "show deals at risk": `## At-Risk Deals Analysis (Demo Data)
 
 ### 🔴 High Risk (2 deals - $960K)
 
@@ -44,12 +148,9 @@ const mockResponses: Record<string, string> = {
 - Last activity: 3 days ago
 - **Action:** Schedule technical review meeting
 
-### Risk Factors:
-- Extended stage duration
-- Reduced engagement frequency
-- Competitor activity detected`,
+*Connect Salesforce for live risk analysis*`,
 
-  "top opportunities by value": `## Top Opportunities by Value
+      "top opportunities by value": `## Top Opportunities by Value (Demo Data)
 
 | Rank | Opportunity | Company | Value | Probability |
 |------|------------|---------|-------|-------------|
@@ -62,29 +163,21 @@ const mockResponses: Record<string, string> = {
 **Total Pipeline:** $1.87M
 **Weighted Value:** $671K
 
-💡 Focus on Enterprise Platform Deal - highest probability with strong value.`,
-};
+*Connect Salesforce for live opportunity data*`,
+    };
 
-export function PipelineAgent() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: "Hi! I'm your Pipeline Summarizer Agent. I can help you analyze your pipeline, forecast revenue, and identify opportunities that need attention.\n\nTry asking me about your Q1 forecast, deals at risk, or top opportunities!",
-      timestamp: new Date(),
-    },
-  ]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+    return mockResponses[normalizedQuery] || 
+      `I analyzed your query: "${query}"
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+Based on demo pipeline data:
+- **6 active opportunities** worth $1.97M
+- **Average win rate:** 50%
+- **2 deals** require immediate attention
+
+Would you like me to drill down into any specific area?
+
+*Connect Salesforce for live insights*`;
   };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -102,9 +195,7 @@ export function PipelineAgent() {
 
     // Simulate AI response
     setTimeout(() => {
-      const normalizedInput = input.toLowerCase().trim();
-      const response = mockResponses[normalizedInput] || 
-        `I analyzed your query: "${input}"\n\nBased on your current pipeline:\n- **6 active opportunities** worth $1.97M\n- **Average win rate:** 50%\n- **2 deals** require immediate attention\n\nWould you like me to drill down into any specific area?`;
+      const response = generateResponse(input);
 
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -123,7 +214,7 @@ export function PipelineAgent() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] bg-card rounded-xl border shadow-card overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-12rem)] bg-card rounded-xl border shadow-card overflow-hidden">
       {/* Header */}
       <div className="gradient-primary px-6 py-4 flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
@@ -131,7 +222,9 @@ export function PipelineAgent() {
         </div>
         <div>
           <h2 className="font-semibold text-primary-foreground">Pipeline Summarizer Agent</h2>
-          <p className="text-sm text-primary-foreground/70">Natural language pipeline analysis</p>
+          <p className="text-sm text-primary-foreground/70">
+            {isConnected ? 'Connected to Salesforce' : 'Demo mode - Connect Salesforce for live data'}
+          </p>
         </div>
         <Sparkles className="w-5 h-5 text-primary-foreground/50 ml-auto animate-pulse-subtle" />
       </div>

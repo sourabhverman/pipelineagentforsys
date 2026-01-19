@@ -1,1 +1,16 @@
 project_id = "dbyggdkrlmuqzdhxodzr"
+
+[functions.salesforce-auth]
+verify_jwt = false
+
+[functions.salesforce-callback]
+verify_jwt = false
+
+[functions.salesforce-opportunities]
+verify_jwt = false
+
+[functions.salesforce-forecast]
+verify_jwt = false
+
+[functions.salesforce-status]
+verify_jwt = false

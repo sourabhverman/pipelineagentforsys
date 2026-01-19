@@ -1,9 +1,13 @@
-import { teamForecasts, formatCurrency, formatPercentage } from '@/lib/mockData';
+import { formatCurrency, formatPercentage, type LegacyTeamForecast } from '@/lib/mockData';
 import { AlertTriangle, TrendingDown, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export function ForecastTable() {
-  const totals = teamForecasts.reduce(
+interface ForecastTableProps {
+  forecasts: LegacyTeamForecast[];
+}
+
+export function ForecastTable({ forecasts }: ForecastTableProps) {
+  const totals = forecasts.reduce(
     (acc, team) => ({
       committed: acc.committed + team.committed,
       bestCase: acc.bestCase + team.bestCase,
@@ -14,7 +18,7 @@ export function ForecastTable() {
     { committed: 0, bestCase: 0, pipeline: 0, target: 0, deals: 0 }
   );
 
-  const totalVariance = ((totals.committed - totals.target) / totals.target) * 100;
+  const totalVariance = totals.target > 0 ? ((totals.committed - totals.target) / totals.target) * 100 : 0;
 
   return (
     <div className="bg-card rounded-xl border shadow-card overflow-hidden animate-slide-up">
@@ -47,7 +51,7 @@ export function ForecastTable() {
             </tr>
           </thead>
           <tbody>
-            {teamForecasts.map((team) => (
+            {forecasts.map((team) => (
               <tr key={team.teamName} className="border-b border-border hover:bg-muted/50 transition-colors">
                 <td className="py-4 px-6">
                   <div className="flex items-center gap-3">

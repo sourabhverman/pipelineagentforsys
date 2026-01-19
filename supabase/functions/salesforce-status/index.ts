@@ -38,10 +38,11 @@ Deno.serve(async (req) => {
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error checking status:', error);
     return new Response(
-      JSON.stringify({ connected: false, error: error.message }),
+      JSON.stringify({ connected: false, error: errorMessage }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
