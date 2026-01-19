@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { opportunity, account } = body;
+    const { opportunity, account, owner } = body;
 
     // Prepare the record
     const opportunityRecord = {
@@ -60,14 +60,14 @@ Deno.serve(async (req) => {
       description: opportunity.description,
       probability: opportunity.probability,
       opportunity_type: opportunity.type,
-      sf_account_id: opportunity.accountId,
-      sf_owner_id: opportunity.ownerId,
+      sf_account_id: opportunity.accountId || account?.id,
+      sf_owner_id: opportunity.ownerId || owner?.id,
       account_name: account?.name,
       account_industry: account?.industry,
       account_billing_country: account?.billingCountry,
       account_rating: account?.rating,
-      owner_name: account?.owner?.name,
-      owner_email: account?.owner?.email,
+      owner_name: owner?.name || account?.owner?.name,
+      owner_email: owner?.email || account?.owner?.email,
       raw_payload: body,
       updated_at: new Date().toISOString(),
     };
