@@ -13,8 +13,9 @@ interface ForecastViewProps {
 export function ForecastView({ salesforce }: ForecastViewProps) {
   const { isConnected, isLoading, teamForecasts: sfForecasts, forecastSummary, error, connectSalesforce, refreshData } = salesforce;
 
-  // Use Salesforce data if connected, otherwise use mock data
-  const displayForecasts = isConnected && sfForecasts.length > 0
+  // Use Salesforce data if connected (even if empty for proper zero-state)
+  // Only fall back to mock data if not connected
+  const displayForecasts = isConnected
     ? sfForecasts.map(f => ({
         teamName: f.teamName,
         teamLead: f.teamLead,

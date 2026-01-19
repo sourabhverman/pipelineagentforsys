@@ -12,7 +12,9 @@ interface OpportunitiesViewProps {
 export function OpportunitiesView({ salesforce }: OpportunitiesViewProps) {
   const { isConnected, isLoading, opportunities: sfOpportunities, error, connectSalesforce, refreshData } = salesforce;
   
-  const displayOpportunities = isConnected && sfOpportunities.length > 0
+  // Use Salesforce data if connected (even if empty for proper zero-state)
+  // Only fall back to mock data if not connected
+  const displayOpportunities = isConnected
     ? sfOpportunities.map(convertToDisplayOpportunity)
     : mockOpportunities;
 
@@ -54,11 +56,23 @@ export function OpportunitiesView({ salesforce }: OpportunitiesViewProps) {
         </div>
 
         {/* Opportunities Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayOpportunities.map((opp) => (
-            <OpportunityCard key={opp.id} opportunity={opp} />
-          ))}
-        </div>
+        {displayOpportunities.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {displayOpportunities.map((opp) => (
+              <OpportunityCard key={opp.id} opportunity={opp} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card border rounded-lg p-12 text-center">
+            <p className="text-lg font-medium text-foreground">No opportunities found</p>
+            <p className="text-muted-foreground mt-2">
+              You don't have any opportunities assigned to your account yet.
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Opportunities will appear here when your email matches the owner email in Salesforce.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
