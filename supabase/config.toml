@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.opportunity-data]
 verify_jwt = false
+
+[functions.pipeline-agent]
+verify_jwt = false
