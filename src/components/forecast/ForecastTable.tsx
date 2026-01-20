@@ -6,6 +6,14 @@ interface ForecastTableProps {
   forecasts: LegacyTeamForecast[];
 }
 
+// Get current quarter label dynamically
+const getCurrentQuarter = (): string => {
+  const now = new Date();
+  const quarter = Math.ceil((now.getMonth() + 1) / 3);
+  const year = now.getFullYear();
+  return `Q${quarter} ${year}`;
+};
+
 export function ForecastTable({ forecasts }: ForecastTableProps) {
   const totals = forecasts.reduce(
     (acc, team) => ({
@@ -25,7 +33,7 @@ export function ForecastTable({ forecasts }: ForecastTableProps) {
       <div className="gradient-primary px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-primary-foreground">Q1 2025 Forecast by Team</h2>
+            <h2 className="text-lg font-semibold text-primary-foreground">{getCurrentQuarter()} Forecast by Team</h2>
             <p className="text-sm text-primary-foreground/70">Forecast Updater Agent • Auto-updated 5 mins ago</p>
           </div>
           {Math.abs(totalVariance) > 10 && (
