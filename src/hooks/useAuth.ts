@@ -22,54 +22,88 @@ export const useAuth = () => {
     profile: null,
   });
 
+  const fetchUserData = async (session: Session) => {
+    try {
+      const profileResult = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      const roleResult = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id);
+
+      const isAdmin = roleResult.data?.some?.(r => r.role === 'admin') || false;
+
+      setState({
+        user: session.user,
+        session,
+        isLoading: false,
+        isAdmin,
+        profile: profileResult.data ? {
+          email: profileResult.data.email,
+          fullName: profileResult.data.full_name,
+        } : {
+          email: session.user.email || '',
+          fullName: null,
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching auth data:', error);
+      setState({
+        user: session.user,
+        session,
+        isLoading: false,
+        isAdmin: false,
+        profile: {
+          email: session.user.email || '',
+          fullName: null,
+        },
+      });
+    }
+  };
+
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
+    let mounted = true;
+
+    // Get initial session first
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
         
         if (session?.user) {
-          // Fetch profile and role, but don't block on errors
-          try {
-            const profileResult = await supabase
-              .from('profiles')
-              .select('email, full_name')
-              .eq('user_id', session.user.id)
-              .maybeSingle();
+          console.log('Initial session found:', session.user.email);
+          await fetchUserData(session);
+        } else {
+          console.log('No initial session');
+          setState(prev => ({ ...prev, isLoading: false }));
+        }
+      } catch (error) {
+        console.error('Error getting session:', error);
+        if (mounted) {
+          setState(prev => ({ ...prev, isLoading: false }));
+        }
+      }
+    };
 
-            const roleResult = await supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', session.user.id);
+    initializeAuth();
 
-            const isAdmin = roleResult.data?.some?.(r => r.role === 'admin') || false;
-
-            setState({
-              user: session.user,
-              session,
-              isLoading: false,
-              isAdmin,
-              profile: profileResult.data ? {
-                email: profileResult.data.email,
-                fullName: profileResult.data.full_name,
-              } : {
-                email: session.user.email || '',
-                fullName: null,
-              },
-            });
-          } catch (error) {
-            console.error('Error fetching auth data:', error);
-            setState({
-              user: session.user,
-              session,
-              isLoading: false,
-              isAdmin: false,
-              profile: {
-                email: session.user.email || '',
-                fullName: null,
-              },
-            });
-          }
+    // Set up auth state listener for future changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+        
+        console.log('Auth state changed:', event, session?.user?.email);
+        
+        // Skip INITIAL_SESSION as we handle it above
+        if (event === 'INITIAL_SESSION') return;
+        
+        if (session?.user) {
+          await fetchUserData(session);
         } else {
           setState({
             user: null,
@@ -82,15 +116,10 @@ export const useAuth = () => {
       }
     );
 
-    // Then get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
-      // If there's a session, onAuthStateChange will handle it
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
