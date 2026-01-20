@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from './useAuth';
 
 interface SalesforceOpportunity {
   id: string;
@@ -62,8 +61,6 @@ function calculateDaysInStage(updatedAt: string): number {
 }
 
 export function useSalesforce() {
-  const { user, isLoading: authLoading } = useAuth();
-  
   const [state, setState] = useState<SalesforceState>({
     isConnected: false,
     isLoading: true,
@@ -89,11 +86,10 @@ export function useSalesforce() {
     }
   }, []);
 
-  // Fetch opportunities from the local database (pushed by Salesforce webhook)
-  // RLS policy handles filtering: admins see all, users see only their assigned opportunities
+  // Fetch all opportunities from the database (no auth required)
   const fetchOpportunities = useCallback(async (): Promise<SalesforceOpportunity[]> => {
     try {
-      console.log('Fetching opportunities for user:', user?.email);
+      console.log('Fetching all opportunities (public access)');
       
       const { data, error } = await supabase
         .from('salesforce_opportunities')
@@ -105,14 +101,13 @@ export function useSalesforce() {
         throw error;
       }
       
-      console.log('Opportunities fetched (RLS filtered):', data?.length || 0);
+      console.log('Opportunities fetched:', data?.length || 0);
       
       if (!data || data.length === 0) {
         return [];
       }
 
       // Transform database records to our interface format
-      // No client-side filtering needed - RLS handles access control
       return data.map(opp => {
         const daysUntilClose = Math.ceil(
           (new Date(opp.close_date || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
@@ -139,7 +134,7 @@ export function useSalesforce() {
       console.error('Error fetching opportunities:', err);
       throw err;
     }
-  }, [user]);
+  }, []);
 
   // Generate forecast data from opportunities
   const generateForecast = useCallback((opportunities: SalesforceOpportunity[]) => {
@@ -233,25 +228,8 @@ export function useSalesforce() {
     }
   }, [fetchOpportunities, generateForecast, checkConnection]);
 
-  // Set up realtime subscription for live updates - only when authenticated
+  // Set up realtime subscription for live updates - no auth required
   useEffect(() => {
-    // Don't fetch if auth is still loading or user is not authenticated
-    if (authLoading) {
-      return;
-    }
-    
-    if (!user) {
-      setState({
-        isConnected: false,
-        isLoading: false,
-        opportunities: [],
-        teamForecasts: [],
-        forecastSummary: null,
-        error: null,
-      });
-      return;
-    }
-
     refreshData();
 
     // Subscribe to changes in salesforce_opportunities table
@@ -274,7 +252,7 @@ export function useSalesforce() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshData, user, authLoading]);
+  }, [refreshData]);
 
   // Placeholder for connect - now webhook-based, so just shows setup info
   const connectSalesforce = useCallback(async () => {
