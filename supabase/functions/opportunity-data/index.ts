@@ -50,7 +50,9 @@ Deno.serve(async (req) => {
 
     if (isFlatFormat) {
       // Handle FLAT payload format from Salesforce
-      // Example: { opportunityId, opportunityName, stageName, amount, closeDate, accountId, accountName, ... }
+      // Example: { opportunityId, opportunityName, stageName, amount, closeDate, accountId, accountName, owner: { ownerId, owner_name, owner_email }, ... }
+      const owner = body.owner || {};
+      
       opportunityRecord = {
         sf_opportunity_id: body.opportunityId || body.OpportunityId,
         name: body.opportunityName || body.OpportunityName || body.name || body.Name,
@@ -61,13 +63,13 @@ Deno.serve(async (req) => {
         probability: body.probability || body.Probability,
         opportunity_type: body.type || body.Type || body.opportunityType,
         sf_account_id: body.accountId || body.AccountId,
-        sf_owner_id: body.ownerId || body.OwnerId,
+        sf_owner_id: body.ownerId || body.OwnerId || owner.ownerId || owner.OwnerId,
         account_name: body.accountName || body.AccountName,
         account_industry: body.industry || body.Industry,
         account_billing_country: body.billingCountry || body.BillingCountry,
         account_rating: body.rating || body.Rating,
-        owner_name: body.ownerName || body.OwnerName,
-        owner_email: body.ownerEmail || body.OwnerEmail,
+        owner_name: body.ownerName || body.OwnerName || owner.owner_name || owner.ownerName || owner.OwnerName || owner.name || owner.Name,
+        owner_email: body.ownerEmail || body.OwnerEmail || owner.owner_email || owner.ownerEmail || owner.OwnerEmail || owner.email || owner.Email,
         raw_payload: body,
         updated_at: new Date().toISOString(),
       };
