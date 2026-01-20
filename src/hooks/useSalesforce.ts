@@ -37,7 +37,7 @@ interface ForecastSummary {
   variance: string;
 }
 
-interface SalesforceState {
+export interface SalesforceState {
   isConnected: boolean;
   isLoading: boolean;
   opportunities: SalesforceOpportunity[];

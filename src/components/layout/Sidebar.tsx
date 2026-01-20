@@ -1,4 +1,4 @@
-import { LayoutDashboard, MessageSquare, TrendingUp, Target, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, TrendingUp, Target, ChevronRight, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -10,6 +10,7 @@ const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'pipeline-agent', label: 'Pipeline Agent', icon: MessageSquare },
   { id: 'forecast', label: 'Forecast', icon: TrendingUp },
+  { id: 'win-loss-analyzer', label: 'Win/Loss Analyzer', icon: Scale },
   { id: 'opportunities', label: 'Opportunities', icon: Target },
 ];
 
