@@ -62,7 +62,7 @@ function calculateDaysInStage(updatedAt: string): number {
 }
 
 export function useSalesforce() {
-  const { user, isLoading: authLoading, isAdmin } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   
   const [state, setState] = useState<SalesforceState>({
     isConnected: false,
@@ -90,9 +90,10 @@ export function useSalesforce() {
   }, []);
 
   // Fetch opportunities from the local database (pushed by Salesforce webhook)
+  // RLS policy handles filtering: admins see all, users see only their assigned opportunities
   const fetchOpportunities = useCallback(async (): Promise<SalesforceOpportunity[]> => {
     try {
-      console.log('Fetching opportunities for user:', user?.email, 'isAdmin:', isAdmin);
+      console.log('Fetching opportunities for user:', user?.email);
       
       const { data, error } = await supabase
         .from('salesforce_opportunities')
@@ -104,27 +105,15 @@ export function useSalesforce() {
         throw error;
       }
       
-      console.log('Raw opportunities fetched:', data?.length || 0);
+      console.log('Opportunities fetched (RLS filtered):', data?.length || 0);
       
       if (!data || data.length === 0) {
         return [];
       }
 
-      // Admins see all data, regular users see only their assigned opportunities
-      let filteredData = data;
-      if (!isAdmin) {
-        const userEmail = user?.email?.toLowerCase();
-        console.log('Filtering for user email:', userEmail);
-        filteredData = userEmail 
-          ? data.filter(opp => opp.owner_email?.toLowerCase() === userEmail)
-          : [];
-        console.log('Filtered opportunities count:', filteredData.length);
-      } else {
-        console.log('Admin user - showing all opportunities');
-      }
-
       // Transform database records to our interface format
-      return filteredData.map(opp => {
+      // No client-side filtering needed - RLS handles access control
+      return data.map(opp => {
         const daysUntilClose = Math.ceil(
           (new Date(opp.close_date || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
         );
@@ -150,7 +139,7 @@ export function useSalesforce() {
       console.error('Error fetching opportunities:', err);
       throw err;
     }
-  }, [user, isAdmin]);
+  }, [user]);
 
   // Generate forecast data from opportunities
   const generateForecast = useCallback((opportunities: SalesforceOpportunity[]) => {
@@ -285,7 +274,7 @@ export function useSalesforce() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshData, user, authLoading, isAdmin]);
+  }, [refreshData, user, authLoading]);
 
   // Placeholder for connect - now webhook-based, so just shows setup info
   const connectSalesforce = useCallback(async () => {
