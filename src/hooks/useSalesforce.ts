@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './useAuth';
 
 interface SalesforceOpportunity {
   id: string;
@@ -61,6 +62,8 @@ function calculateDaysInStage(updatedAt: string): number {
 }
 
 export function useSalesforce() {
+  const { user, isLoading: authLoading } = useAuth();
+  
   const [state, setState] = useState<SalesforceState>({
     isConnected: false,
     isLoading: true,
@@ -224,8 +227,25 @@ export function useSalesforce() {
     }
   }, [fetchOpportunities, generateForecast]);
 
-  // Set up realtime subscription for live updates
+  // Set up realtime subscription for live updates - only when authenticated
   useEffect(() => {
+    // Don't fetch if auth is still loading or user is not authenticated
+    if (authLoading) {
+      return;
+    }
+    
+    if (!user) {
+      setState({
+        isConnected: false,
+        isLoading: false,
+        opportunities: [],
+        teamForecasts: [],
+        forecastSummary: null,
+        error: null,
+      });
+      return;
+    }
+
     refreshData();
 
     // Subscribe to changes in salesforce_opportunities table
@@ -248,7 +268,7 @@ export function useSalesforce() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshData]);
+  }, [refreshData, user, authLoading]);
 
   // Placeholder for connect - now webhook-based, so just shows setup info
   const connectSalesforce = useCallback(async () => {
