@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { DashboardView } from '@/components/views/DashboardView';
 import { PipelineAgentView } from '@/components/views/PipelineAgentView';
 import { ForecastView } from '@/components/views/ForecastView';
+import { WinLossAnalyzerView } from '@/components/views/WinLossAnalyzerView';
 import { OpportunitiesView } from '@/components/views/OpportunitiesView';
 import { useSalesforce } from '@/hooks/useSalesforce';
 
@@ -20,6 +21,8 @@ const Index = () => {
         return <PipelineAgentView salesforce={salesforce} />;
       case 'forecast':
         return <ForecastView salesforce={salesforce} />;
+      case 'win-loss-analyzer':
+        return <WinLossAnalyzerView salesforce={salesforce} />;
       case 'opportunities':
         return <OpportunitiesView salesforce={salesforce} />;
       default:
