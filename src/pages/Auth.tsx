@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,13 +11,21 @@ import { TrendingUp, BarChart3 } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, user, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already logged in
-  if (user) {
-    navigate('/');
-    return null;
+  // Redirect if already logged in - use useEffect to avoid render issues
+  if (!authLoading && user) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Show loading while checking auth state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
   }
 
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
