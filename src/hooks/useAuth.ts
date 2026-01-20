@@ -31,19 +31,18 @@ export const useAuth = () => {
         if (session?.user) {
           // Fetch profile and role, but don't block on errors
           try {
-            const [profileResult, roleResult] = await Promise.all([
-              supabase
-                .from('profiles')
-                .select('email, full_name')
-                .eq('user_id', session.user.id)
-                .single(),
-              supabase
-                .from('user_roles')
-                .select('role')
-                .eq('user_id', session.user.id)
-            ]);
+            const profileResult = await supabase
+              .from('profiles')
+              .select('email, full_name')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
 
-            const isAdmin = profileResult?.error?.code !== 'PGRST116' && roleResult.data?.some?.(r => r.role === 'admin') || false;
+            const roleResult = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', session.user.id);
+
+            const isAdmin = roleResult.data?.some?.(r => r.role === 'admin') || false;
 
             setState({
               user: session.user,
