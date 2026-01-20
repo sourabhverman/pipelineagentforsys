@@ -1,8 +1,7 @@
-import { DollarSign, Target, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, RefreshCw } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { PipelineStages } from '@/components/dashboard/PipelineStages';
-import { RiskDeals } from '@/components/dashboard/RiskDeals';
 import { OpportunityCard } from '@/components/dashboard/OpportunityCard';
 import { SalesforceConnect } from '@/components/salesforce/SalesforceConnect';
 import { Button } from '@/components/ui/button';
@@ -23,7 +22,6 @@ export function DashboardView({ salesforce }: DashboardViewProps) {
 
   const totalPipeline = displayOpportunities.reduce((sum, opp) => sum + opp.value, 0);
   const weightedPipeline = displayOpportunities.reduce((sum, opp) => sum + (opp.value * opp.probability / 100), 0);
-  const atRiskCount = displayOpportunities.filter(opp => opp.riskLevel !== 'low').length;
   const avgWinRate = displayOpportunities.length > 0 
     ? displayOpportunities.reduce((sum, opp) => sum + opp.probability, 0) / displayOpportunities.length
     : 0;
@@ -60,7 +58,7 @@ export function DashboardView({ salesforce }: DashboardViewProps) {
         )}
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <MetricCard
             title="Total Pipeline"
             value={formatCurrency(totalPipeline)}
@@ -77,12 +75,6 @@ export function DashboardView({ salesforce }: DashboardViewProps) {
             icon={TrendingUp}
           />
           <MetricCard
-            title="Deals at Risk"
-            value={atRiskCount.toString()}
-            icon={AlertTriangle}
-            variant="risk"
-          />
-          <MetricCard
             title="Avg Win Probability"
             value={`${avgWinRate.toFixed(0)}%`}
             change={-2.1}
@@ -92,29 +84,23 @@ export function DashboardView({ salesforce }: DashboardViewProps) {
         </div>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <PipelineStages opportunities={displayOpportunities} />
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Recent Opportunities</h3>
-              {displayOpportunities.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {displayOpportunities.slice(0, 4).map((opp) => (
-                    <OpportunityCard key={opp.id} opportunity={opp} />
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-card border rounded-lg p-8 text-center text-muted-foreground">
-                  <p>No opportunities available for your account.</p>
-                  <p className="text-sm mt-1">Opportunities will appear here when assigned to your email.</p>
-                </div>
-              )}
-            </div>
-          </div>
-
+        <div className="space-y-6">
+          <PipelineStages opportunities={displayOpportunities} />
+          
           <div>
-            <RiskDeals opportunities={displayOpportunities} />
+            <h3 className="text-lg font-semibold mb-4">Recent Opportunities</h3>
+            {displayOpportunities.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {displayOpportunities.slice(0, 6).map((opp) => (
+                  <OpportunityCard key={opp.id} opportunity={opp} />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-card border rounded-lg p-8 text-center text-muted-foreground">
+                <p>No opportunities available for your account.</p>
+                <p className="text-sm mt-1">Opportunities will appear here when assigned to your email.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
