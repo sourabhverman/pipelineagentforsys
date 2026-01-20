@@ -1,16 +1,10 @@
 import { Opportunity, stageConfig, formatCurrency } from '@/lib/mockData';
-import { Clock, AlertTriangle, TrendingUp, Building2 } from 'lucide-react';
+import { Clock, TrendingUp, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
 }
-
-const riskStyles = {
-  low: 'text-success',
-  medium: 'text-warning',
-  high: 'text-risk',
-};
 
 // Default style for unknown stages
 const defaultStageStyle = { color: 'bg-muted', textColor: 'text-muted-foreground', order: 0 };
@@ -71,17 +65,9 @@ export function OpportunityCard({ opportunity }: OpportunityCardProps) {
       </div>
 
       <div className="flex items-center justify-between pt-4 border-t border-border">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-sm">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{opportunity.daysInStage}d in stage</span>
-          </div>
-          {opportunity.riskLevel !== 'low' && (
-            <div className={cn("flex items-center gap-1.5 text-sm", riskStyles[opportunity.riskLevel])}>
-              <AlertTriangle className="w-4 h-4" />
-              <span className="capitalize">{opportunity.riskLevel} risk</span>
-            </div>
-          )}
+        <div className="flex items-center gap-1.5 text-sm">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          <span className="text-muted-foreground">{opportunity.daysInStage}d in stage</span>
         </div>
         <span className="text-xs text-muted-foreground">{opportunity.lastActivity}</span>
       </div>
