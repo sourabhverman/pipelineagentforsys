@@ -103,8 +103,14 @@ export function useSalesforce() {
         return [];
       }
 
+      // Filter opportunities by owner email matching current user email
+      const userEmail = user?.email?.toLowerCase();
+      const filteredData = userEmail 
+        ? data.filter(opp => opp.owner_email?.toLowerCase() === userEmail)
+        : [];
+
       // Transform database records to our interface format
-      return data.map(opp => {
+      return filteredData.map(opp => {
         const daysUntilClose = Math.ceil(
           (new Date(opp.close_date || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
         );
@@ -130,7 +136,7 @@ export function useSalesforce() {
       console.error('Error fetching opportunities:', err);
       throw err;
     }
-  }, []);
+  }, [user]);
 
   // Generate forecast data from opportunities
   const generateForecast = useCallback((opportunities: SalesforceOpportunity[]) => {

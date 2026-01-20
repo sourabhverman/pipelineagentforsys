@@ -10,6 +10,8 @@ const Index = () => {
   const [activeView, setActiveView] = useState('dashboard');
   const salesforce = useSalesforce();
 
+  console.log('Index page rendered, activeView:', activeView);
+
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':

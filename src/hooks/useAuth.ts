@@ -29,31 +29,50 @@ export const useAuth = () => {
         console.log('Auth state changed:', event, session?.user?.email);
         
         if (session?.user) {
-          // Fetch profile and role
-          const [profileResult, roleResult] = await Promise.all([
-            supabase
-              .from('profiles')
-              .select('email, full_name')
-              .eq('user_id', session.user.id)
-              .single(),
-            supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', session.user.id)
-          ]);
+          // Fetch profile and role, but don't block on errors
+          try {
+            const [profileResult, roleResult] = await Promise.all([
+              supabase
+                .from('profiles')
+                .select('email, full_name')
+                .eq('user_id', session.user.id)
+                .single()
+                .catch(() => ({ data: null, error: null })),
+              supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', session.user.id)
+                .catch(() => ({ data: [], error: null }))
+            ]);
 
-          const isAdmin = roleResult.data?.some(r => r.role === 'admin') || false;
+            const isAdmin = profileResult?.error?.code !== 'PGRST116' && roleResult.data?.some?.(r => r.role === 'admin') || false;
 
-          setState({
-            user: session.user,
-            session,
-            isLoading: false,
-            isAdmin,
-            profile: profileResult.data ? {
-              email: profileResult.data.email,
-              fullName: profileResult.data.full_name,
-            } : null,
-          });
+            setState({
+              user: session.user,
+              session,
+              isLoading: false,
+              isAdmin,
+              profile: profileResult.data ? {
+                email: profileResult.data.email,
+                fullName: profileResult.data.full_name,
+              } : {
+                email: session.user.email || '',
+                fullName: null,
+              },
+            });
+          } catch (error) {
+            console.error('Error fetching auth data:', error);
+            setState({
+              user: session.user,
+              session,
+              isLoading: false,
+              isAdmin: false,
+              profile: {
+                email: session.user.email || '',
+                fullName: null,
+              },
+            });
+          }
         } else {
           setState({
             user: null,
