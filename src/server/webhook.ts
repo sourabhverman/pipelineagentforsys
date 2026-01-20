@@ -34,8 +34,7 @@ export async function handleSalesforceWebhook(payload: SalesforceWebhookPayload)
         .from('salesforce_opportunities')
         .select('id')
         .eq('sf_opportunity_id', opp.id)
-        .single()
-        .catch(() => ({ data: null }));
+        .maybeSingle();
 
       if (existing) {
         // Update existing opportunity

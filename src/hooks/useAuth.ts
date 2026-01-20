@@ -36,13 +36,11 @@ export const useAuth = () => {
                 .from('profiles')
                 .select('email, full_name')
                 .eq('user_id', session.user.id)
-                .single()
-                .catch(() => ({ data: null, error: null })),
+                .single(),
               supabase
                 .from('user_roles')
                 .select('role')
                 .eq('user_id', session.user.id)
-                .catch(() => ({ data: [], error: null }))
             ]);
 
             const isAdmin = profileResult?.error?.code !== 'PGRST116' && roleResult.data?.some?.(r => r.role === 'admin') || false;
