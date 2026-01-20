@@ -67,13 +67,30 @@ export const useAuth = () => {
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
 
-    // Get initial session first
+    // Get initial session first with timeout
     const initializeAuth = async () => {
+      // Safety timeout - if auth takes more than 5 seconds, stop loading
+      timeoutId = setTimeout(() => {
+        if (mounted) {
+          console.warn('Auth initialization timed out');
+          setState(prev => ({ ...prev, isLoading: false }));
+        }
+      }, 5000);
+
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        clearTimeout(timeoutId);
         
         if (!mounted) return;
+        
+        if (error) {
+          console.error('Session error:', error);
+          setState(prev => ({ ...prev, isLoading: false }));
+          return;
+        }
         
         if (session?.user) {
           console.log('Initial session found:', session.user.email);
@@ -83,6 +100,7 @@ export const useAuth = () => {
           setState(prev => ({ ...prev, isLoading: false }));
         }
       } catch (error) {
+        clearTimeout(timeoutId);
         console.error('Error getting session:', error);
         if (mounted) {
           setState(prev => ({ ...prev, isLoading: false }));
@@ -118,6 +136,7 @@ export const useAuth = () => {
 
     return () => {
       mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);

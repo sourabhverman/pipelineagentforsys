@@ -62,7 +62,7 @@ function calculateDaysInStage(updatedAt: string): number {
 }
 
 export function useSalesforce() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, isAdmin } = useAuth();
   
   const [state, setState] = useState<SalesforceState>({
     isConnected: false,
@@ -92,22 +92,36 @@ export function useSalesforce() {
   // Fetch opportunities from the local database (pushed by Salesforce webhook)
   const fetchOpportunities = useCallback(async (): Promise<SalesforceOpportunity[]> => {
     try {
+      console.log('Fetching opportunities for user:', user?.email, 'isAdmin:', isAdmin);
+      
       const { data, error } = await supabase
         .from('salesforce_opportunities')
         .select('*')
         .order('close_date', { ascending: true });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase query error:', error);
+        throw error;
+      }
+      
+      console.log('Raw opportunities fetched:', data?.length || 0);
       
       if (!data || data.length === 0) {
         return [];
       }
 
-      // Filter opportunities by owner email matching current user email
-      const userEmail = user?.email?.toLowerCase();
-      const filteredData = userEmail 
-        ? data.filter(opp => opp.owner_email?.toLowerCase() === userEmail)
-        : [];
+      // Admins see all data, regular users see only their assigned opportunities
+      let filteredData = data;
+      if (!isAdmin) {
+        const userEmail = user?.email?.toLowerCase();
+        console.log('Filtering for user email:', userEmail);
+        filteredData = userEmail 
+          ? data.filter(opp => opp.owner_email?.toLowerCase() === userEmail)
+          : [];
+        console.log('Filtered opportunities count:', filteredData.length);
+      } else {
+        console.log('Admin user - showing all opportunities');
+      }
 
       // Transform database records to our interface format
       return filteredData.map(opp => {
@@ -136,7 +150,7 @@ export function useSalesforce() {
       console.error('Error fetching opportunities:', err);
       throw err;
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   // Generate forecast data from opportunities
   const generateForecast = useCallback((opportunities: SalesforceOpportunity[]) => {
@@ -195,28 +209,24 @@ export function useSalesforce() {
   }, []);
 
   const refreshData = useCallback(async () => {
+    console.log('Refreshing Salesforce data...');
     setState(s => ({ ...s, isLoading: true, error: null }));
     
     try {
-      const opportunities = await fetchOpportunities();
-      const connected = opportunities.length > 0;
+      // First check if any data exists in the table (to determine connection status)
+      const isDataPresent = await checkConnection();
+      console.log('Data present in database:', isDataPresent);
       
-      if (!connected) {
-        setState({ 
-          isConnected: false, 
-          isLoading: false,
-          opportunities: [],
-          teamForecasts: [],
-          forecastSummary: null,
-          error: null,
-        });
-        return;
-      }
+      const opportunities = await fetchOpportunities();
+      console.log('Opportunities for user:', opportunities.length);
+      
+      // isConnected = data exists in DB (regardless of user's access)
+      // This shows proper zero state for users with no assigned opportunities
 
       const { teamForecasts, summary } = generateForecast(opportunities);
 
       setState({
-        isConnected: true,
+        isConnected: isDataPresent,
         isLoading: false,
         opportunities,
         teamForecasts,
@@ -224,6 +234,7 @@ export function useSalesforce() {
         error: null,
       });
     } catch (err: unknown) {
+      console.error('Error refreshing data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setState(s => ({ 
         ...s, 
@@ -231,7 +242,7 @@ export function useSalesforce() {
         error: errorMessage,
       }));
     }
-  }, [fetchOpportunities, generateForecast]);
+  }, [fetchOpportunities, generateForecast, checkConnection]);
 
   // Set up realtime subscription for live updates - only when authenticated
   useEffect(() => {
@@ -274,7 +285,7 @@ export function useSalesforce() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshData, user, authLoading]);
+  }, [refreshData, user, authLoading, isAdmin]);
 
   // Placeholder for connect - now webhook-based, so just shows setup info
   const connectSalesforce = useCallback(async () => {
