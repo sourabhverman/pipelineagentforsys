@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Allow public read of opportunities" ON salesforce_opportunities;
