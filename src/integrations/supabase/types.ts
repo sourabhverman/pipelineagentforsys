@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_logs: {
+        Row: {
+          action_type: string
+          created_at: string
+          id: string
+          opportunity_id: string
+          opportunity_name: string | null
+          payload: Json
+          sf_record_id: string | null
+          synced_at: string | null
+          synced_to_sf: boolean | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          id?: string
+          opportunity_id: string
+          opportunity_name?: string | null
+          payload: Json
+          sf_record_id?: string | null
+          synced_at?: string | null
+          synced_to_sf?: boolean | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          id?: string
+          opportunity_id?: string
+          opportunity_name?: string | null
+          payload?: Json
+          sf_record_id?: string | null
+          synced_at?: string | null
+          synced_to_sf?: boolean | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -173,7 +209,10 @@ export type Database = {
           opportunity_id: string
           opportunity_name: string | null
           priority: string | null
+          sf_task_id: string | null
           status: string | null
+          synced_at: string | null
+          synced_to_sf: boolean | null
           title: string
           updated_at: string
         }
@@ -188,7 +227,10 @@ export type Database = {
           opportunity_id: string
           opportunity_name?: string | null
           priority?: string | null
+          sf_task_id?: string | null
           status?: string | null
+          synced_at?: string | null
+          synced_to_sf?: boolean | null
           title: string
           updated_at?: string
         }
@@ -203,7 +245,10 @@ export type Database = {
           opportunity_id?: string
           opportunity_name?: string | null
           priority?: string | null
+          sf_task_id?: string | null
           status?: string | null
+          synced_at?: string | null
+          synced_to_sf?: boolean | null
           title?: string
           updated_at?: string
         }

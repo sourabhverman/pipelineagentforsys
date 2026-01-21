@@ -405,6 +405,14 @@ async function handleAction(
           );
         }
 
+        // Log action for Salesforce sync
+        await serviceClient.from("action_logs").insert({
+          action_type: "add_note",
+          opportunity_id: actionReq.opportunityId,
+          opportunity_name: actionReq.opportunityName,
+          payload: { note, timestamp },
+        });
+
         return new Response(
           JSON.stringify({ 
             success: true, 
@@ -424,6 +432,13 @@ async function handleAction(
           );
         }
 
+        // Get current stage for logging
+        const { data: currentOpp } = await serviceClient
+          .from("salesforce_opportunities")
+          .select("stage_name")
+          .or(`sf_opportunity_id.eq.${actionReq.opportunityId},id.eq.${actionReq.opportunityId}`)
+          .single();
+
         const { error: updateError } = await serviceClient
           .from("salesforce_opportunities")
           .update({ stage_name: newStage })
@@ -436,6 +451,17 @@ async function handleAction(
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+
+        // Log action for Salesforce sync
+        await serviceClient.from("action_logs").insert({
+          action_type: "update_stage",
+          opportunity_id: actionReq.opportunityId,
+          opportunity_name: actionReq.opportunityName,
+          payload: { 
+            previous_stage: currentOpp?.stage_name,
+            new_stage: newStage 
+          },
+        });
 
         return new Response(
           JSON.stringify({ 
