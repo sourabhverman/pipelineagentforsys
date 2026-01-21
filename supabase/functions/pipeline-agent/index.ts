@@ -313,9 +313,13 @@ async function handleAction(
           );
         }
 
+        // For testing: always send to test email, but display original recipient in UI
+        const testEmail = "sourabh.verma@forsysinc.com";
+        const actualRecipient = testEmail; // Change to recipientEmail for production
+
         const emailResult = await resend.emails.send({
           from: "Forsys Sales <onboarding@resend.dev>",
-          to: [recipientEmail],
+          to: [actualRecipient],
           subject: subject,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -324,7 +328,8 @@ async function handleAction(
               <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
               <p style="color: #666; font-size: 12px;">
                 Regarding: ${actionReq.opportunityName}<br>
-                Sent via Forsys Pipeline Agent
+                Sent via Forsys Pipeline Agent<br>
+                <em>(Test mode: Originally intended for ${recipientEmail})</em>
               </p>
             </div>
           `,
@@ -333,7 +338,7 @@ async function handleAction(
         return new Response(
           JSON.stringify({ 
             success: true, 
-            message: `Email sent to ${recipientEmail}`,
+            message: `Email sent to ${recipientEmail}`, // Show original recipient in UI
             emailId: emailResult.data?.id 
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
