@@ -275,22 +275,45 @@ async function handleAction(
   try {
     switch (actionReq.action) {
       case "create_task": {
-        // Store task in chat context (agent chat only mode)
-        const taskResult = {
-          success: true,
-          message: `Task created: "${actionReq.data.title}" for ${actionReq.opportunityName}`,
-          task: {
-            title: actionReq.data.title,
-            dueDate: actionReq.data.dueDate,
-            priority: actionReq.data.priority || "medium",
-            opportunityId: actionReq.opportunityId,
-            opportunityName: actionReq.opportunityName,
-            createdAt: new Date().toISOString(),
-          }
-        };
-        return new Response(JSON.stringify(taskResult), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
+        const { title, dueDate, priority } = actionReq.data;
+        
+        if (!title) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Task title is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Insert task into database
+        const { data: newTask, error: insertError } = await serviceClient
+          .from("tasks")
+          .insert({
+            opportunity_id: actionReq.opportunityId,
+            opportunity_name: actionReq.opportunityName,
+            title: title,
+            due_date: dueDate || null,
+            priority: priority || "medium",
+            status: "pending",
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Error creating task:", insertError);
+          return new Response(
+            JSON.stringify({ success: false, error: "Failed to create task" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Task created: "${title}" for ${actionReq.opportunityName}`,
+            task: newTask,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       case "send_email": {
