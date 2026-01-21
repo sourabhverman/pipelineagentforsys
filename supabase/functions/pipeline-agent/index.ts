@@ -1,10 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "resend";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+interface ActionRequest {
+  action: "create_task" | "send_email" | "add_note" | "update_stage";
+  opportunityId: string;
+  opportunityName?: string;
+  data: {
+    // For tasks
+    title?: string;
+    dueDate?: string;
+    priority?: string;
+    // For emails
+    recipientEmail?: string;
+    recipientName?: string;
+    subject?: string;
+    body?: string;
+    // For notes
+    note?: string;
+    // For stage updates
+    newStage?: string;
+  };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,7 +34,22 @@ serve(async (req) => {
   }
 
   try {
-    const { query } = await req.json();
+    const body = await req.json();
+    const { query, action } = body;
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Handle action requests (non-AI quick actions)
+    if (action) {
+      return await handleAction(action as ActionRequest, supabaseUrl, supabaseServiceKey);
+    }
     
     if (!query) {
       return new Response(
@@ -21,16 +58,8 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     // Get user from auth header
     const authHeader = req.headers.get("Authorization");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     let userEmail: string | null = null;
     let isAdmin = false;
@@ -82,6 +111,8 @@ serve(async (req) => {
 
     // Build context from opportunities
     let pipelineContext = "";
+    let opportunitiesList = "";
+    
     if (opportunities && opportunities.length > 0) {
       const totalPipeline = opportunities.reduce((sum, o) => sum + (o.amount || 0), 0);
       const avgProbability = opportunities.reduce((sum, o) => sum + (o.probability || 0), 0) / opportunities.length;
@@ -94,6 +125,10 @@ serve(async (req) => {
         if (!byStage[stage]) byStage[stage] = [];
         byStage[stage].push(o);
       });
+
+      opportunitiesList = opportunities.map(o => 
+        `- ID: ${o.sf_opportunity_id || o.id} | ${o.name} | ${o.account_name} | $${(o.amount || 0).toLocaleString()} | ${o.stage_name} | ${o.probability}% | Owner: ${o.owner_name} (${o.owner_email || 'no email'})`
+      ).join('\n');
 
       pipelineContext = `
 ## Current Pipeline Data (${opportunities.length} opportunities)
@@ -114,7 +149,11 @@ ${opportunities.slice(0, 10).map((o, i) => `${i + 1}. **${o.name}** - ${o.accoun
    - Stage: ${o.stage_name || "Unknown"}
    - Probability: ${o.probability || 0}%
    - Close Date: ${o.close_date || "Not set"}
-   - Owner: ${o.owner_name || "Unassigned"}`).join('\n\n')}
+   - Owner: ${o.owner_name || "Unassigned"} (${o.owner_email || "no email"})
+   - Opportunity ID: ${o.sf_opportunity_id || o.id}`).join('\n\n')}
+
+### All Opportunities (for actions)
+${opportunitiesList}
 
 ### Risk Analysis
 ${opportunities.filter(o => (o.probability || 0) < 50 || !o.close_date).slice(0, 5).map(o => `- **${o.name}**: ${o.probability || 0}% probability, Close: ${o.close_date || "Not set"}`).join('\n')}
@@ -137,6 +176,41 @@ You have access to real Salesforce opportunity data. Use this data to answer que
 - Top opportunities and priorities
 - Stage analysis and conversion insights
 - Account and owner performance
+
+## QUICK ACTIONS
+You can help users take actions on opportunities. When a user wants to take an action, respond with structured JSON in a code block.
+
+### Available Actions:
+
+1. **Create Task** - Create a follow-up task for an opportunity
+   When user says things like "create a task for X" or "remind me to follow up on X":
+   \`\`\`json
+   {"action":"create_task","opportunityId":"<id>","opportunityName":"<name>","data":{"title":"<task title>","dueDate":"<YYYY-MM-DD>","priority":"high|medium|low"}}
+   \`\`\`
+
+2. **Send Email** - Send an email related to an opportunity
+   When user says "send email to X" or "email the owner of X":
+   \`\`\`json
+   {"action":"send_email","opportunityId":"<id>","opportunityName":"<name>","data":{"recipientEmail":"<email>","recipientName":"<name>","subject":"<subject>","body":"<email body>"}}
+   \`\`\`
+
+3. **Add Note** - Add a note to an opportunity
+   When user says "add note to X" or "note on X":
+   \`\`\`json
+   {"action":"add_note","opportunityId":"<id>","opportunityName":"<name>","data":{"note":"<note content>"}}
+   \`\`\`
+
+4. **Update Stage** - Move opportunity to a different stage
+   When user says "move X to proposal" or "update stage of X":
+   \`\`\`json
+   {"action":"update_stage","opportunityId":"<id>","opportunityName":"<name>","data":{"newStage":"<new stage name>"}}
+   \`\`\`
+
+IMPORTANT: 
+- When outputting an action, include the JSON in a code block with \`\`\`json tags
+- Always include a brief explanation before/after the action block
+- If you can't find the opportunity, ask for clarification
+- Use the opportunity ID from the data provided
 
 Always provide specific data points, dollar amounts, and percentages when available.
 Format responses with Markdown for clarity (headers, bullet points, tables when appropriate).
@@ -190,3 +264,171 @@ ${pipelineContext}`;
     );
   }
 });
+
+async function handleAction(
+  actionReq: ActionRequest,
+  supabaseUrl: string,
+  supabaseServiceKey: string
+): Promise<Response> {
+  const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+  
+  try {
+    switch (actionReq.action) {
+      case "create_task": {
+        // Store task in chat context (agent chat only mode)
+        const taskResult = {
+          success: true,
+          message: `Task created: "${actionReq.data.title}" for ${actionReq.opportunityName}`,
+          task: {
+            title: actionReq.data.title,
+            dueDate: actionReq.data.dueDate,
+            priority: actionReq.data.priority || "medium",
+            opportunityId: actionReq.opportunityId,
+            opportunityName: actionReq.opportunityName,
+            createdAt: new Date().toISOString(),
+          }
+        };
+        return new Response(JSON.stringify(taskResult), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      case "send_email": {
+        const resendApiKey = Deno.env.get("RESEND_API_KEY");
+        if (!resendApiKey) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Email service not configured" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const resend = new Resend(resendApiKey);
+        
+        const { recipientEmail, recipientName, subject, body } = actionReq.data;
+        
+        if (!recipientEmail || !subject || !body) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Missing email details" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const emailResult = await resend.emails.send({
+          from: "Forsys Sales <onboarding@resend.dev>",
+          to: [recipientEmail],
+          subject: subject,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <p>Hi ${recipientName || "there"},</p>
+              <p>${body.replace(/\n/g, "<br>")}</p>
+              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+              <p style="color: #666; font-size: 12px;">
+                Regarding: ${actionReq.opportunityName}<br>
+                Sent via Forsys Pipeline Agent
+              </p>
+            </div>
+          `,
+        });
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Email sent to ${recipientEmail}`,
+            emailId: emailResult.data?.id 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "add_note": {
+        // Update opportunity description with note
+        const { note } = actionReq.data;
+        
+        if (!note) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Note content is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get current description
+        const { data: opp } = await serviceClient
+          .from("salesforce_opportunities")
+          .select("description")
+          .or(`sf_opportunity_id.eq.${actionReq.opportunityId},id.eq.${actionReq.opportunityId}`)
+          .single();
+
+        const timestamp = new Date().toISOString().split("T")[0];
+        const existingDesc = opp?.description || "";
+        const updatedDesc = existingDesc 
+          ? `${existingDesc}\n\n[${timestamp}] ${note}`
+          : `[${timestamp}] ${note}`;
+
+        const { error: updateError } = await serviceClient
+          .from("salesforce_opportunities")
+          .update({ description: updatedDesc })
+          .or(`sf_opportunity_id.eq.${actionReq.opportunityId},id.eq.${actionReq.opportunityId}`);
+
+        if (updateError) {
+          console.error("Error adding note:", updateError);
+          return new Response(
+            JSON.stringify({ success: false, error: "Failed to add note" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Note added to ${actionReq.opportunityName}` 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "update_stage": {
+        const { newStage } = actionReq.data;
+        
+        if (!newStage) {
+          return new Response(
+            JSON.stringify({ success: false, error: "New stage is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error: updateError } = await serviceClient
+          .from("salesforce_opportunities")
+          .update({ stage_name: newStage })
+          .or(`sf_opportunity_id.eq.${actionReq.opportunityId},id.eq.${actionReq.opportunityId}`);
+
+        if (updateError) {
+          console.error("Error updating stage:", updateError);
+          return new Response(
+            JSON.stringify({ success: false, error: "Failed to update stage" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `${actionReq.opportunityName} moved to ${newStage}` 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      default:
+        return new Response(
+          JSON.stringify({ success: false, error: "Unknown action" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+    }
+  } catch (error) {
+    console.error("Action error:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Action failed" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+}

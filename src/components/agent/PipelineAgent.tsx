@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, TrendingUp, AlertTriangle, DollarSign } from 'lucide-react';
+import { Send, Bot, User, Sparkles, TrendingUp, AlertTriangle, DollarSign, CheckSquare, Mail, StickyNote, ArrowRightLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -12,8 +12,22 @@ const suggestedQueries = [
   { icon: DollarSign, text: "Top opportunities by value" },
 ];
 
+const quickActionSuggestions = [
+  { icon: CheckSquare, text: "Create a follow-up task for the top opportunity", label: "Create Task" },
+  { icon: Mail, text: "Draft an email to the owner of the largest deal", label: "Send Email" },
+  { icon: StickyNote, text: "Add a note to the highest value deal", label: "Add Note" },
+  { icon: ArrowRightLeft, text: "Move the top Qualification deal to Proposal stage", label: "Update Stage" },
+];
+
 interface PipelineAgentProps {
   salesforce: SalesforceState;
+}
+
+interface ActionData {
+  action: "create_task" | "send_email" | "add_note" | "update_stage";
+  opportunityId: string;
+  opportunityName?: string;
+  data: Record<string, string | undefined>;
 }
 
 const PIPELINE_AGENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pipeline-agent`;
@@ -26,13 +40,14 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
       id: '1',
       role: 'assistant',
       content: isConnected 
-        ? "Hi! I'm your AI Pipeline Agent, connected to your Salesforce data. Ask me anything about your pipeline using natural language!\n\nTry: \"What's my forecast?\", \"Show at-risk deals\", or \"Who owns the biggest opportunities?\""
-        : "Hi! I'm your AI Pipeline Agent. Connect Salesforce to get AI-powered insights from your real pipeline data.\n\nOnce connected, you can ask natural language questions about your sales pipeline!",
+        ? "Hi! I'm your AI Pipeline Agent, connected to your Salesforce data. Ask me anything about your pipeline or use quick actions!\n\n**Try:** \"Create a task for the TechCorp deal\", \"Email the owner of our largest opportunity\", or \"Move Enterprise Deal to Negotiation\""
+        : "Hi! I'm your AI Pipeline Agent. Connect Salesforce to get AI-powered insights and take actions on your real pipeline data.\n\nOnce connected, you can ask natural language questions and take quick actions!",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [executingAction, setExecutingAction] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -42,6 +57,72 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Execute an action from AI response
+  const executeAction = async (actionData: ActionData) => {
+    setExecutingAction(actionData.action);
+    
+    try {
+      const response = await fetch(PIPELINE_AGENT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ action: actionData }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(result.message);
+        
+        // Add confirmation message
+        setMessages(prev => [...prev, {
+          id: `action-${Date.now()}`,
+          role: 'assistant',
+          content: `✅ **Action Completed**\n\n${result.message}`,
+          timestamp: new Date(),
+        }]);
+      } else {
+        toast.error(result.error || "Action failed");
+        setMessages(prev => [...prev, {
+          id: `action-error-${Date.now()}`,
+          role: 'assistant',
+          content: `❌ **Action Failed**\n\n${result.error || "Something went wrong"}`,
+          timestamp: new Date(),
+        }]);
+      }
+    } catch (error) {
+      console.error("Action error:", error);
+      toast.error("Failed to execute action");
+    } finally {
+      setExecutingAction(null);
+    }
+  };
+
+  // Parse message content for action blocks
+  const parseMessageForActions = (content: string): { text: string; actions: ActionData[] } => {
+    const actions: ActionData[] = [];
+    let text = content;
+
+    // Find JSON code blocks
+    const jsonBlockRegex = /```json\s*([\s\S]*?)```/g;
+    let match;
+
+    while ((match = jsonBlockRegex.exec(content)) !== null) {
+      try {
+        const actionData = JSON.parse(match[1].trim()) as ActionData;
+        if (actionData.action && actionData.opportunityId) {
+          actions.push(actionData);
+        }
+      } catch {
+        // Not a valid action JSON, ignore
+      }
+    }
+
+    return { text, actions };
+  };
 
   const streamResponse = async (query: string) => {
     const response = await fetch(PIPELINE_AGENT_URL, {
@@ -184,6 +265,47 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
     setInput(text);
   };
 
+  // Render message with action buttons
+  const renderMessage = (message: ChatMessage) => {
+    if (message.role === 'user') {
+      return <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{message.content}</div>;
+    }
+
+    const { text, actions } = parseMessageForActions(message.content);
+
+    return (
+      <div>
+        <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">{text}</div>
+        {actions.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {actions.map((action, idx) => (
+              <Button
+                key={idx}
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                disabled={executingAction !== null}
+                onClick={() => executeAction(action)}
+              >
+                {executingAction === action.action ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    {action.action === 'create_task' && <CheckSquare className="w-4 h-4" />}
+                    {action.action === 'send_email' && <Mail className="w-4 h-4" />}
+                    {action.action === 'add_note' && <StickyNote className="w-4 h-4" />}
+                    {action.action === 'update_stage' && <ArrowRightLeft className="w-4 h-4" />}
+                  </>
+                )}
+                Execute: {action.action.replace('_', ' ')}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)] bg-card rounded-xl border shadow-card overflow-hidden">
       {/* Header */}
@@ -194,7 +316,7 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
         <div>
           <h2 className="font-semibold text-primary-foreground">AI Pipeline Agent</h2>
           <p className="text-sm text-primary-foreground/70">
-            {isConnected ? 'Powered by AI • Connected to Salesforce' : 'Connect Salesforce for live data'}
+            {isConnected ? 'Powered by AI • Quick Actions Enabled' : 'Connect Salesforce for live data'}
           </p>
         </div>
         <Sparkles className="w-5 h-5 text-primary-foreground/50 ml-auto animate-pulse-subtle" />
@@ -223,9 +345,7 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
                   : "bg-muted text-foreground rounded-tl-sm"
               )}
             >
-              <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                {message.content}
-              </div>
+              {renderMessage(message)}
             </div>
             {message.role === 'user' && (
               <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shrink-0">
@@ -255,17 +375,36 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
 
       {/* Suggestions */}
       {messages.length === 1 && (
-        <div className="px-6 pb-4 flex gap-2 flex-wrap">
-          {suggestedQueries.map(({ icon: Icon, text }) => (
-            <button
-              key={text}
-              onClick={() => handleSuggestion(text)}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-accent/20 text-sm font-medium text-muted-foreground hover:text-accent transition-colors"
-            >
-              <Icon className="w-4 h-4" />
-              {text}
-            </button>
-          ))}
+        <div className="px-6 pb-4 space-y-3">
+          {/* Query suggestions */}
+          <div className="flex gap-2 flex-wrap">
+            {suggestedQueries.map(({ icon: Icon, text }) => (
+              <button
+                key={text}
+                onClick={() => handleSuggestion(text)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-accent/20 text-sm font-medium text-muted-foreground hover:text-accent transition-colors"
+              >
+                <Icon className="w-4 h-4" />
+                {text}
+              </button>
+            ))}
+          </div>
+          
+          {/* Quick action suggestions */}
+          {isConnected && (
+            <div className="flex gap-2 flex-wrap">
+              {quickActionSuggestions.map(({ icon: Icon, text, label }) => (
+                <button
+                  key={label}
+                  onClick={() => handleSuggestion(text)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 hover:bg-primary/20 text-sm font-medium text-primary hover:text-primary transition-colors border border-primary/20"
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -281,7 +420,9 @@ export function PipelineAgent({ salesforce }: PipelineAgentProps) {
                 handleSend();
               }
             }}
-            placeholder="Ask anything about your pipeline in natural language..."
+            placeholder={isConnected 
+              ? "Ask about your pipeline or request an action..." 
+              : "Connect Salesforce to get started..."}
             className="min-h-[48px] max-h-32 resize-none bg-muted/50 border-0 focus-visible:ring-1"
           />
           <Button 
